@@ -1,0 +1,7 @@
+{application, tcp_interface,
+ [{description, "A simple text-based TCP interface"},
+  {vsn, "0.1.0"},
+  {registered, [ti_sup]},
+  {applications, [kernel, stdlib]},
+  {mod, {ti_app, []}}
+ ]}.

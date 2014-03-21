@@ -1,0 +1,7 @@
+{application, session,
+ [{description, "A session app"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {mod, {session_app, []}}
+ ]}.

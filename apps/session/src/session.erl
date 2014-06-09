@@ -10,6 +10,12 @@ start() ->
 stop() ->
     application:stop(?MODULE).
 
+start(Tid) ->
+    session_sup:start_child(Tid).
+
+stop({Type,Id}) ->
+    session_sup:stop_child(gp:whereis({Type,Id})).
+
 
 stop_sessions(Count) ->
     [session_sup:stop_child(gp:where({session,N})) || N <- lists:seq(1,Count)].

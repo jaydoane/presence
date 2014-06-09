@@ -2,8 +2,6 @@
 
 -compile(export_all).
 
-start_sessions(Count) ->
-    [session_sup:start_child({session,N}) || N <- lists:seq(1,Count)].
 start() ->
     application:start(?MODULE).
 
@@ -16,9 +14,11 @@ start(Tid) ->
 stop({Type,Id}) ->
     session_sup:stop_child(gp:whereis({Type,Id})).
 
+start_count(Type, Count) ->
+    [start({Type,N}) || N <- lists:seq(1,Count)].
 
-stop_sessions(Count) ->
-    [session_sup:stop_child(gp:where({session,N})) || N <- lists:seq(1,Count)].
+stop_count(Type, Count) ->
+    [stop(gp:where({Type,N})) || N <- lists:seq(1,Count)].
 
 subscribe(TransmitterTid, ListenerTid) ->
     %% gp:cast(TransmitterTid, {add_listener, ListenerTid}),

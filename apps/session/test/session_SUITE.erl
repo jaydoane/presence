@@ -82,7 +82,7 @@ session_cluster(Conf)->
     ct:print("~p ping ~p successful", [Node1, Node2]),
 
     Pid = rpc:call(Node2, gp, whereis, [{driver,1}]),
-    true =:= is_pid(Pid),
+    ?assert(is_pid(Pid)),
     ct:print("done").
 
 

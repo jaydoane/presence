@@ -1,5 +1,7 @@
 -module(session).
 
+-include("session.hrl").
+
 -compile(export_all).
 
 start() ->

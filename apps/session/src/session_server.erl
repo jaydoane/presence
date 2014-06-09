@@ -2,11 +2,11 @@
 
 -behaviour(gen_server).
 
+-include("session.hrl").
+
 -export([start_link/1, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
--record(state, {tid, created=os:timestamp(), listeners=[], transmitters=[], notifications=[]}).
 
 start_link(Tid) ->
     gen_server:start_link(?MODULE, [Tid], []).
@@ -81,5 +81,3 @@ terminate(_Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitter
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-info(Format, Data) ->
-    lager:info("~p ~p ~s", [?MODULE, self(), io_lib:format(Format, Data)]).

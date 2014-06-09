@@ -4,6 +4,12 @@
 
 start_sessions(Count) ->
     [session_sup:start_child({session,N}) || N <- lists:seq(1,Count)].
+start() ->
+    application:start(?MODULE).
+
+stop() ->
+    application:stop(?MODULE).
+
 
 stop_sessions(Count) ->
     [session_sup:stop_child(gp:where({session,N})) || N <- lists:seq(1,Count)].

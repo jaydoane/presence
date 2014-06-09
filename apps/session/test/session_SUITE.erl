@@ -12,8 +12,6 @@
 -define(TOP_DIR, "presence/").
 -define(NODES, ['session-ct-1', 'session-ct-2']).
 -define(ERL_FLAGS, "-kernel dist_auto_connect once").
--define(DISCONNECT_TIME, 4000).
--define(UNSPLIT_TIMEOUT, 5000).
 
 absolute_top(Path) ->
     string:substr(Path, 1, string:str(Path, ?TOP_DIR)-1) ++ ?TOP_DIR.
@@ -24,19 +22,17 @@ all() ->
 init_per_suite(Conf) ->
     ct:print("init_per_suite Conf: ~p", [Conf]),
     {ok, Cwd} = file:get_cwd(),
-    AbdTopDir = absolute_top(Cwd),
-    ct:print("top dir: ~p", [AbdTopDir]),
+    AbsTopDir = absolute_top(Cwd),
+    ct:print("top dir: ~p", [AbsTopDir]),
     Nodes = ct:get_config(nodes, ?NODES),
-    DisconnectTime = ct:get_config(disconnect_time, ?DISCONNECT_TIME),
-    UnsplitTimeout = ct:get_config(unsplit_timeout, ?UNSPLIT_TIMEOUT),
     Host = get_host(),
-    EbinDirs = ["apps/session/ebin"],
+    EbinDirs = ["apps/*/ebin", "deps/*/ebin"],
     ErlFlags = 
         lists:flatten(
           [?ERL_FLAGS,
            get_path_flags(),
            " -pa ", filename:absname(filename:dirname(code:which(?MODULE))),
-           " -pa ", [AbdTopDir ++ Path ++ " " || Path <- EbinDirs],
+           " -pa ", [AbsTopDir ++ Path ++ " " || Path <- EbinDirs],
            " -boot start_sasl"
           ]),
     ct:print("ErlFlags = ~p~n", [ErlFlags]),
@@ -49,9 +45,7 @@ init_per_suite(Conf) ->
                 NodeName
         end,
     NodeNames = lists:map(StartNode, Nodes),
-    [{disconnect_time, DisconnectTime},
-     {unsplit_timeout, UnsplitTimeout},
-     {enable_builtin_hooks,false},
+    [{enable_builtin_hooks,false},
      {nodes, NodeNames}|Conf].
 
 end_per_suite(_Conf) ->
@@ -77,45 +71,20 @@ session_cluster() ->
     [{userdata, [{doc, "Tests connection and disconnection of 2 nodes"}]}].
 
 session_cluster(Conf)->
-    Type = passenger,
     Nodes = [Node1, Node2] = get_conf(nodes, Conf),
-    ct:print("Nodes = ~p~n",[Nodes]),
-    %% Node1 = hd(Nodes),
-    %% Node2 = hd(tl(Nodes)),
+    ct:print("Nodes: ~p",[Nodes]),
 
-    CreateSession = rpc:multicall(Nodes, session_server, create_session, [Type]),
-    ct:print("create_session ~p", [CreateSession]),
-
-    rpc:call(Node1, session_server, add, [Type, 1]),
-    rpc:call(Node2, session_server, add, [Type, 2]),
+    R1 = rpc:call(Node1, session, start, [{driver,1}]),
+    R2 = rpc:call(Node2, session, start, [{driver,2}]),
+    ct:print("R1: ~p, R2: ~p", [R1, R2]),
 
     pong = rpc:call(Node1, net_adm, ping, [Node2]),
-    ct:print("~p ping ~p successful.", [Node1, Node2]),
-    %% R1 = rpc:call(Node1, erlang, nodes, []),
-    %% R2 = rpc:call(Node2, erlang, nodes, []),
-    %% ct:print("nodes() on Node1: ~p nodes() on Node2: ~p", [R1, R2]),
+    ct:print("~p ping ~p successful", [Node1, Node2]),
 
-    %% rpc:call(Node1, session_server, nodeup, [Node2]),
-    %% rpc:call(Node2, session_server, nodeup, [Node1]),
-    Result = rpc:call(Node2, session_server, get, [Type, 1]),
-    ct:print("result ~p", [Result]),
-
-    %% 0 = length(connected_users(Node1)),
-    %% 0 = length(connected_users(Node2)),
-
-    %% UID = 123,
-    %% {ok, _SID} = rpc:call(Node1, liveride, register_connection, 
-    %%                      [UID, <<"default">>, tcp_session, self(), null]),
-    %% 1 = length(connected_users(Node1)),
-    %% 1 = length(connected_users(Node2)),
-    %% rpc:call(Node1, liveride, disconnect, [UID, "quit"]),
-    %% 0 = length(connected_users(Node1)),
-    %% 0 = length(connected_users(Node2)),
+    Pid = rpc:call(Node2, gp, whereis, [{driver,1}]),
+    true =:= is_pid(Pid),
     ct:print("done").
 
-
-%% connected_users(Node) ->
-%%     rpc:call(Node, mnesia, dirty_match_object, [#connected_user{_='_'}]).
 
 get_conf(Key, Conf)->
     proplists:get_value(Key, Conf).
@@ -126,8 +95,9 @@ init_nodes(Nodes)->
     Init = 
         fun(Node)->
                 rpc:call(Node, application, start, [sasl]),
+                rpc:call(Node, lager, start, []),
                 rpc:call(Node, mnesia, start, []),
-                rpc:call(Node, application, start, [session])
+                rpc:call(Node, session, start, [])
         end,
     lists:foreach(Init, Nodes).
 
@@ -135,8 +105,9 @@ init_nodes(Nodes)->
 terminate_nodes(Nodes)->
     Terminate = 
         fun(Node)->
-                rpc:call(Node, application, stop, [session]),
+                rpc:call(Node, session, stop, []),
                 rpc:call(Node, mnesia, stop,[]),
+                rpc:call(Node, lager, stop,[]),
                 rpc:call(Node, application, stop, [sasl])
         end,
     lists:foreach(Terminate, Nodes).

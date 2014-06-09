@@ -50,22 +50,6 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 
-%% handle_cast({send, Msg}, #state{out=Out}=State) ->
-%%     info("handle_cast ~p", [{send, Msg}]),
-%%     {noreply, State#state{out=[Msg|Out]}};
-
-%% handle_cast({add_listener, Tid}=_Msg, #state{listeners=Listeners}=State) ->
-%%     {noreply, State#state{listeners=[Tid|Listeners]}};
-
-%% handle_cast({remove_listener, Tid}=_Msg, #state{listeners=Listeners}=State) ->
-%%     {noreply, State#state{listeners=lists:delete(Tid, Listeners)}};
-
-%% handle_cast({add_transmitter, Tid}=_Msg, #state{transmitters=Transmitters}=State) ->
-%%     {noreply, State#state{transmitters=[Tid|Transmitters]}};
-
-%% handle_cast({remove_transmitter, Tid}=_Msg, #state{transmitters=Transmitters}=State) ->
-%%     {noreply, State#state{transmitters=lists:delete(Tid, Transmitters)}};
-
 handle_cast({notify_listeners, Notification}=_Msg, #state{listeners=Listeners}=State) ->
     %% info("handle_cast ~p", [_Msg]),
     [gp:cast(Tid, {notification, Notification}) || Tid <- Listeners],
@@ -90,8 +74,6 @@ handle_info(_Msg, State) ->
 
 terminate(_Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitters}) ->
     info("terminate ~p  ~p", [Tid, _Reason]),
-    %% [gp:cast(LTid, {remove_transmitter, Tid}) || LTid <- Listeners],
-    %% [gp:cast(TTid, {remove_listener, Tid}) || TTid <- Transmitters],
     [ok = gp:call(LTid, {remove_transmitter, Tid}) || LTid <- Listeners],
     [ok = gp:call(TTid, {remove_listener, Tid}) || TTid <- Transmitters],
     gp:unregister(Tid),
@@ -99,16 +81,5 @@ terminate(_Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitter
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-%% Internal functions
-
-%% -define(MILLION, 1000000).
-%% sid() ->
-%%     {Mega, Sec, Micro} = erlang:now(),
-%%     Num = (Mega * ?MILLION * ?MILLION) + (Sec * ?MILLION) + Micro,
-%%     Num.
-    %% list_to_binary(integer_to_list(Num)).
-
 info(Format, Data) ->
     lager:info("~p ~p ~s", [?MODULE, self(), io_lib:format(Format, Data)]).
-    %%error_logger:info_msg("~p:~p: ~s~n", [?MODULE, self(), io_lib:format(Format, Data)]).

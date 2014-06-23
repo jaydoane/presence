@@ -4,8 +4,7 @@
 
 %% API
 -export([start_link/0,
-         start_child/1,
-         stop_child/1]).
+         start_child/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -17,9 +16,6 @@ start_link() ->
 
 start_child(Tid) ->
     supervisor:start_child(?SERVER, [Tid]).
-
-stop_child(Pid) ->
-    gen_server:cast(Pid, stop).
 
 init([]) ->
     Server = {session_server, {session_server, start_link, []},

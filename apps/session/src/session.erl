@@ -13,8 +13,8 @@ stop() ->
 start(Tid) ->
     session_sup:start_child(Tid).
 
-stop({Type,Id}) ->
-    session_sup:stop_child(gp:whereis({Type,Id})).
+stop(Tid) ->
+    session_server:stop(Tid).
 
 start_count(Type, Count) ->
     [start({Type,N}) || N <- lists:seq(1,Count)].

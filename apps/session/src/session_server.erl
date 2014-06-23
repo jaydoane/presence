@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 start_link(Tid) ->
-    gen_server:start_link(?MODULE, [Tid], []).
+    gen_server:start_link({global, Tid}, ?MODULE, [Tid], []).
 
 stop(Pid) ->
     gen_server:cast(Pid, stop).
@@ -20,7 +20,6 @@ stop(Pid) ->
 init([Tid]) ->
     info("init ~p", [Tid]),
     process_flag(trap_exit, true),
-    gp:register(Tid, self()),
     {ok, #state{tid=Tid}}.
 
 
@@ -76,7 +75,6 @@ terminate(_Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitter
     info("terminate ~p  ~p", [Tid, _Reason]),
     [ok = gp:call(LTid, {remove_transmitter, Tid}) || LTid <- Listeners],
     [ok = gp:call(TTid, {remove_listener, Tid}) || TTid <- Transmitters],
-    gp:unregister(Tid),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

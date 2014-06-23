@@ -17,8 +17,8 @@ stop(Pid) ->
 
 %% Behaviour functions
 
-init([Tid]) ->
-    info("init ~p", [Tid]),
+init([{Type,Id} = Tid]) ->
+    ?info("~p", [Tid]),
     process_flag(trap_exit, true),
     {ok, #state{tid=Tid}}.
 
@@ -45,12 +45,12 @@ handle_call(notifications, _From, #state{notifications=Notifications}=State) ->
     {reply, Notifications, State};
 
 handle_call(_Msg, _From, State) ->
-    info("unhandled call ~p", [_Msg]),
+    ?info("unhandled call ~p", [_Msg]),
     {noreply, State}.
 
 
 handle_cast({notify_listeners, Notification}=_Msg, #state{listeners=Listeners}=State) ->
-    %% info("handle_cast ~p", [_Msg]),
+    %% ?info("handle_cast ~p", [_Msg]),
     [gp:cast(Tid, {notification, Notification}) || Tid <- Listeners],
     {noreply, State};
 
@@ -62,17 +62,17 @@ handle_cast(stop, State) ->
     {stop, normal, State};
 
 handle_cast(_Msg, State) ->
-    info("unhandled cast ~p", [_Msg]),
+    ?info("unhandled cast ~p", [_Msg]),
     {noreply, State}.
 
 
 handle_info(_Msg, State) ->
-    info("unhandled info ~p", [_Msg]),
+    ?info("unhandled info ~p", [_Msg]),
     {noreply, State}.
 
 
-terminate(_Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitters}) ->
-    info("terminate ~p  ~p", [Tid, _Reason]),
+terminate(Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitters}) ->
+    ?info("~p ~p", [Tid, Reason]),
     [ok = gp:call(LTid, {remove_transmitter, Tid}) || LTid <- Listeners],
     [ok = gp:call(TTid, {remove_listener, Tid}) || TTid <- Transmitters],
     ok.

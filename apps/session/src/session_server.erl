@@ -11,8 +11,8 @@
 start_link(Tid) ->
     gen_server:start_link({global, Tid}, ?MODULE, [Tid], []).
 
-stop(Pid) ->
-    gen_server:cast(Pid, stop).
+stop(Tid) ->
+    gen_server:call(gp:whereis(Tid), stop).
 
 
 %% Behaviour functions
@@ -34,6 +34,8 @@ handle_call({add_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters
 
 handle_call({remove_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters}=State) ->
     {reply, ok, State#state{transmitters=lists:delete(Tid, Transmitters)}};
+handle_call(stop, _From, State) ->
+    {stop, normal, ok ,State};
 
 handle_call(listeners, _From, #state{listeners=Listeners}=State) ->
     {reply, Listeners, State};
@@ -58,8 +60,6 @@ handle_cast({notification, Notification}=_Msg, #state{notifications=Notification
     %% info("handle_cast ~p", [_Msg]),
     {noreply, State#state{notifications=[Notification|Notifications]}};
 
-handle_cast(stop, State) ->
-    {stop, normal, State};
 
 handle_cast(_Msg, State) ->
     ?info("unhandled cast ~p", [_Msg]),

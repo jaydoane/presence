@@ -20,7 +20,13 @@ stop(Tid) ->
 init([{Type,Id} = Tid]) ->
     ?info("~p", [Tid]),
     process_flag(trap_exit, true),
-    {ok, #state{tid=Tid}}.
+    TypeState = try
+                    erlang:apply(Type, init, [Id])
+                catch
+                    error:undef ->
+                        undefined
+                end,
+    {ok, #state{tid=Tid, type_state=TypeState}}.
 
 
 handle_call({add_listener, Tid}=_Msg, _From, #state{listeners=Listeners}=State) ->
@@ -56,10 +62,16 @@ handle_cast({notify_listeners, Notification}=_Msg, #state{listeners=Listeners}=S
     [gp:cast(Tid, {notification, Notification}) || Tid <- Listeners],
     {noreply, State};
 
-handle_cast({notification, Notification}=_Msg, #state{notifications=Notifications}=State) ->
-    %% info("handle_cast ~p", [_Msg]),
-    {noreply, State#state{notifications=[Notification|Notifications]}};
-
+handle_cast({notification, Notification}=_Msg,
+            #state{tid={Type,_Id}, notifications=Notifications}=State) ->
+    %% ?info("handle_cast ~p", [_Msg]),
+    NewState = try
+                   erlang:apply(Type, notify, [Notification, State])
+               catch
+                    error:undef ->
+                       State#state{notifications=[Notification|Notifications]}
+               end,
+    {noreply, NewState};
 
 handle_cast(_Msg, State) ->
     ?info("unhandled cast ~p", [_Msg]),

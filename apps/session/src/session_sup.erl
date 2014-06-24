@@ -4,7 +4,7 @@
 
 %% API
 -export([start_link/0,
-         start_child/1]).
+         start_child/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -14,8 +14,8 @@
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
 
-start_child(Tid) ->
-    supervisor:start_child(?SERVER, [Tid]).
+start_child(Tid, Opts) ->
+    supervisor:start_child(?SERVER, [Tid, Opts]).
 
 init([]) ->
     Server = {session_server, {session_server, start_link, []},

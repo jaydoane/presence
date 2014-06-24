@@ -11,7 +11,10 @@ stop() ->
     application:stop(?MODULE).
 
 start(Tid) ->
-    session_sup:start_child(Tid).
+    start(Tid, []).
+
+start(Tid, Opts) ->
+    session_sup:start_child(Tid, Opts).
 
 stop(Tid) ->
     session_server:stop(Tid).

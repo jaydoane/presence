@@ -4,12 +4,12 @@
 
 -include("session.hrl").
 
--export([start_link/1, stop/1]).
+-export([start_link/2, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-start_link(Tid) ->
-    gen_server:start_link({global, Tid}, ?MODULE, [Tid], []).
+start_link(Tid, Opts) ->
+    gen_server:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
 stop(Tid) ->
     gen_server:call(gp:whereis(Tid), stop).
@@ -17,11 +17,11 @@ stop(Tid) ->
 
 %% Behaviour functions
 
-init([{Type,Id} = Tid]) ->
-    ?info("~p", [Tid]),
+init([{Type,_Id}=Tid, Opts]) ->
+    ?info("~p ~p", [Tid, Opts]),
     process_flag(trap_exit, true),
     TypeState = try
-                    erlang:apply(Type, init, [Id])
+                    erlang:apply(Type, init, [Tid, Opts])
                 catch
                     error:undef ->
                         undefined

@@ -3,6 +3,7 @@
                 listeners=[],
                 transmitters=[],
                 notifications=[],
+                refs=[],
                 type_state}).
 
 -compile([{parse_transform, lager_transform}]).

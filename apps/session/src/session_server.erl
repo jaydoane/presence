@@ -29,19 +29,27 @@ init([{Type,Id} = Tid]) ->
     {ok, #state{tid=Tid, type_state=TypeState}}.
 
 
-handle_call({add_listener, Tid}=_Msg, _From, #state{listeners=Listeners}=State) ->
-    {reply, ok, State#state{listeners=[Tid|Listeners]}};
-
-handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners}=State) ->
-    {reply, ok, State#state{listeners=lists:delete(Tid, Listeners)}};
-
-handle_call({add_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters}=State) ->
-    {reply, ok, State#state{transmitters=[Tid|Transmitters]}};
-
-handle_call({remove_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters}=State) ->
-    {reply, ok, State#state{transmitters=lists:delete(Tid, Transmitters)}};
 handle_call(stop, _From, State) ->
     {stop, normal, ok ,State};
+
+handle_call({add_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
+    ListenerPid = gp:whereis(Tid),
+    Ref = erlang:monitor(process, ListenerPid),
+    {reply, ok, State#state{listeners=[Tid|Listeners], refs=[{Ref,Tid}|Refs]}};
+
+handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
+    ListenerRefs = [{R,T} || {R,T} <- Refs, T =:= Tid],
+    {reply, ok, State#state{listeners=lists:delete(Tid, Listeners), refs=Refs--ListenerRefs}};
+
+handle_call({add_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters, refs=Refs}=State) ->
+    TransmitterPid = gp:whereis(Tid),
+    Ref = erlang:monitor(process, TransmitterPid),
+    {reply, ok, State#state{transmitters=[Tid|Transmitters], refs=[{Ref,Tid}|Refs]}};
+
+handle_call({remove_transmitter, Tid}=_Msg, _From,
+            #state{transmitters=Transmitters, refs=Refs}=State) ->
+    TransmitterRefs = [{R,T} || {R,T} <- Refs, T =:= Tid],
+    {reply, ok, State#state{transmitters=lists:delete(Tid, Transmitters), refs=Refs--TransmitterRefs}};
 
 handle_call(listeners, _From, #state{listeners=Listeners}=State) ->
     {reply, Listeners, State};
@@ -78,6 +86,16 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
+handle_info({'DOWN', Ref, process, Pid, Reason},
+            #state{listeners=Listeners, transmitters=Transmitters, refs=Refs}=State) ->
+    ?info("Pid ~p exited reason ~p", [Pid, Reason]),
+    DownRefs = [{R,T} || {R,T} <- Refs, R =:= Ref],
+    ?info("DownRefs ~p", [DownRefs]),
+    DownTids = [T || {_R,T} <- DownRefs],
+    ?info("DownTids ~p", [DownTids]),
+    {noreply, State#state{listeners=Listeners--DownTids, transmitters=Transmitters--DownTids,
+                          refs=Refs--DownRefs}};
+    
 handle_info(_Msg, State) ->
     ?info("unhandled info ~p", [_Msg]),
     {noreply, State}.

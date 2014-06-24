@@ -33,18 +33,28 @@ handle_call(stop, _From, State) ->
     {stop, normal, ok ,State};
 
 handle_call({add_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
-    ListenerPid = gp:whereis(Tid),
-    Ref = erlang:monitor(process, ListenerPid),
-    {reply, ok, State#state{listeners=[Tid|Listeners], refs=[{Ref,Tid}|Refs]}};
+    case lists:member(Tid, Listeners) of
+        false ->
+            ListenerPid = gp:whereis(Tid),
+            Ref = erlang:monitor(process, ListenerPid),
+            {reply, ok, State#state{listeners=[Tid|Listeners], refs=[{Ref,Tid}|Refs]}};
+        true ->
+            {reply, ok, State}
+    end;
 
 handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
     ListenerRefs = [{R,T} || {R,T} <- Refs, T =:= Tid],
     {reply, ok, State#state{listeners=lists:delete(Tid, Listeners), refs=Refs--ListenerRefs}};
 
 handle_call({add_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters, refs=Refs}=State) ->
-    TransmitterPid = gp:whereis(Tid),
-    Ref = erlang:monitor(process, TransmitterPid),
-    {reply, ok, State#state{transmitters=[Tid|Transmitters], refs=[{Ref,Tid}|Refs]}};
+    case lists:member(Tid, Transmitters) of
+        false ->
+            TransmitterPid = gp:whereis(Tid),
+            Ref = erlang:monitor(process, TransmitterPid),
+            {reply, ok, State#state{transmitters=[Tid|Transmitters], refs=[{Ref,Tid}|Refs]}};
+        true ->
+            {reply, ok, State}
+    end;
 
 handle_call({remove_transmitter, Tid}=_Msg, _From,
             #state{transmitters=Transmitters, refs=Refs}=State) ->

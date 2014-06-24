@@ -8,12 +8,10 @@
 session_test_() ->
     {setup,
      fun() ->
-             application:start(session)
-             ,application:start(lager)
+             {ok, _Started} = application:ensure_all_started(session)
      end,
      fun(_) ->
-             application:stop(session)
-             ,application:stop(lager)
+             ok = application:stop(session)
      end,
      [
       {spawn, ?_test(?debugVal(t_session_lifecycle()))} 

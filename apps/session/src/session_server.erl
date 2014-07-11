@@ -22,13 +22,13 @@ stop(Tid) ->
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
     process_flag(trap_exit, true),
-    TypeState = try
-                    erlang:apply(Type, init, [Tid, Opts])
-                catch
-                    error:undef ->
-                        undefined
-                end,
-    {ok, #state{tid=Tid, type_state=TypeState}}.
+    State = try
+                erlang:apply(Type, init, [Tid, Opts])
+            catch
+                error:undef ->
+                    #state{}
+            end,
+    {ok, State#state{tid=Tid}}.
 
 
 handle_call(stop, _From, State) ->

@@ -11,6 +11,14 @@ unregister(Tid) ->
 whereis(Tid) ->
     global:whereis_name(Tid).
 
+status(Tid) ->
+    case ?MODULE:whereis(Tid) of
+        undefined ->
+            undefined;
+        Pid ->
+            sys:get_status(Pid)
+    end.
+
 call(Tid, Msg) ->
     try
         gen_server:call(?MODULE:whereis(Tid), Msg)

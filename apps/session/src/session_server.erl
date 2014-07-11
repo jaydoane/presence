@@ -36,14 +36,6 @@ handle_call(stop, _From, State) ->
 
 handle_call({add_listener, Tid}=_Msg, _From, State) ->
     {reply, ok, add_listener(Tid, State)};
-    %% case lists:member(Tid, Listeners) of
-    %%     false ->
-    %%         ListenerPid = gp:whereis(Tid),
-    %%         Ref = erlang:monitor(process, ListenerPid),
-    %%         {reply, ok, State#state{listeners=[Tid|Listeners], ref_tids=[{Ref,Tid}|RefTids]}};
-    %%     true ->
-    %%         {reply, ok, State}
-    %% end;
 
 handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, ref_tids=RefTids}=State) ->
     ListenerRefTids = [{R,T} || {R,T} <- RefTids, T =:= Tid],

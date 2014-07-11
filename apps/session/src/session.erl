@@ -28,6 +28,9 @@ stop_count(Type, Count) ->
 subscribe(TransmitterTid, ListenerTid) ->
     ok = gp:call(TransmitterTid, {add_listener, ListenerTid}).
 
+subscribe_async(TransmitterTid, ListenerTid) ->
+    ok = gp:cast(TransmitterTid, {add_listener, ListenerTid}).
+
 unsubscribe(TransmitterTid, ListenerTid) ->
     ok = gp:call(TransmitterTid, {remove_listener, ListenerTid}).
 

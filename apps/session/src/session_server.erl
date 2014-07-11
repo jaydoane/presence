@@ -52,6 +52,9 @@ handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 
+handle_cast({add_listener, Tid}=_Msg, State) ->
+    {noreply, add_listener(Tid, State)};
+
 handle_cast({notify_listeners, Notification}=_Msg, #state{listeners=Listeners}=State) ->
     %% ?info("handle_cast ~p", [_Msg]),
     [gp:cast(Tid, {notification, Notification}) || Tid <- Listeners],

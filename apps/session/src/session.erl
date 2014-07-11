@@ -26,10 +26,8 @@ stop_count(Type, Count) ->
     [stop(gp:where({Type,N})) || N <- lists:seq(1,Count)].
 
 subscribe(TransmitterTid, ListenerTid) ->
-    ok = gp:call(TransmitterTid, {add_listener, ListenerTid}),
-    ok = gp:call(ListenerTid, {add_transmitter, TransmitterTid}).
+    ok = gp:call(TransmitterTid, {add_listener, ListenerTid}).
 
 unsubscribe(TransmitterTid, ListenerTid) ->
-    ok = gp:call(TransmitterTid, {remove_listener, ListenerTid}),
-    ok = gp:call(ListenerTid, {remove_transmitter, TransmitterTid}).
+    ok = gp:call(TransmitterTid, {remove_listener, ListenerTid}).
 

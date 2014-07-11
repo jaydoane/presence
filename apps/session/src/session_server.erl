@@ -8,6 +8,8 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-export([add_listener/2]).
+
 start_link(Tid, Opts) ->
     gen_server:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
@@ -32,40 +34,23 @@ init([{Type,_Id}=Tid, Opts]) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok ,State};
 
-handle_call({add_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
-    case lists:member(Tid, Listeners) of
-        false ->
-            ListenerPid = gp:whereis(Tid),
-            Ref = erlang:monitor(process, ListenerPid),
-            {reply, ok, State#state{listeners=[Tid|Listeners], refs=[{Ref,Tid}|Refs]}};
-        true ->
-            {reply, ok, State}
-    end;
+handle_call({add_listener, Tid}=_Msg, _From, State) ->
+    {reply, ok, add_listener(Tid, State)};
+    %% case lists:member(Tid, Listeners) of
+    %%     false ->
+    %%         ListenerPid = gp:whereis(Tid),
+    %%         Ref = erlang:monitor(process, ListenerPid),
+    %%         {reply, ok, State#state{listeners=[Tid|Listeners], ref_tids=[{Ref,Tid}|RefTids]}};
+    %%     true ->
+    %%         {reply, ok, State}
+    %% end;
 
-handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, refs=Refs}=State) ->
-    ListenerRefs = [{R,T} || {R,T} <- Refs, T =:= Tid],
-    {reply, ok, State#state{listeners=lists:delete(Tid, Listeners), refs=Refs--ListenerRefs}};
-
-handle_call({add_transmitter, Tid}=_Msg, _From, #state{transmitters=Transmitters, refs=Refs}=State) ->
-    case lists:member(Tid, Transmitters) of
-        false ->
-            TransmitterPid = gp:whereis(Tid),
-            Ref = erlang:monitor(process, TransmitterPid),
-            {reply, ok, State#state{transmitters=[Tid|Transmitters], refs=[{Ref,Tid}|Refs]}};
-        true ->
-            {reply, ok, State}
-    end;
-
-handle_call({remove_transmitter, Tid}=_Msg, _From,
-            #state{transmitters=Transmitters, refs=Refs}=State) ->
-    TransmitterRefs = [{R,T} || {R,T} <- Refs, T =:= Tid],
-    {reply, ok, State#state{transmitters=lists:delete(Tid, Transmitters), refs=Refs--TransmitterRefs}};
+handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, ref_tids=RefTids}=State) ->
+    ListenerRefTids = [{R,T} || {R,T} <- RefTids, T =:= Tid],
+    {reply, ok, State#state{listeners=Listeners--Tid, ref_tids=RefTids--ListenerRefTids}};
 
 handle_call(listeners, _From, #state{listeners=Listeners}=State) ->
     {reply, Listeners, State};
-
-handle_call(transmitters, _From, #state{transmitters=Transmitters}=State) ->
-    {reply, Transmitters, State};
 
 handle_call(notifications, _From, #state{notifications=Notifications}=State) ->
     {reply, Notifications, State};
@@ -97,25 +82,35 @@ handle_cast(_Msg, State) ->
 
 
 handle_info({'DOWN', Ref, process, Pid, Reason},
-            #state{listeners=Listeners, transmitters=Transmitters, refs=Refs}=State) ->
+            #state{listeners=Listeners, ref_tids=RefTids}=State) ->
     ?info("Pid ~p exited reason ~p", [Pid, Reason]),
-    DownRefs = [{R,T} || {R,T} <- Refs, R =:= Ref],
-    ?info("DownRefs ~p", [DownRefs]),
-    DownTids = [T || {_R,T} <- DownRefs],
+    DownRefTids = [{R,T} || {R,T} <- RefTids, R =:= Ref],
+    ?info("DownRefTids ~p", [DownRefTids]),
+    DownTids = [T || {_R,T} <- DownRefTids],
     ?info("DownTids ~p", [DownTids]),
-    {noreply, State#state{listeners=Listeners--DownTids, transmitters=Transmitters--DownTids,
-                          refs=Refs--DownRefs}};
+    {noreply, State#state{listeners=Listeners--DownTids, ref_tids=RefTids--DownRefTids}};
     
 handle_info(_Msg, State) ->
     ?info("unhandled info ~p", [_Msg]),
     {noreply, State}.
 
 
-terminate(Reason, #state{tid=Tid, listeners=Listeners, transmitters=Transmitters}) ->
+terminate(Reason, #state{tid=Tid}) ->
     ?info("~p ~p", [Tid, Reason]),
-    [ok = gp:call(LTid, {remove_transmitter, Tid}) || LTid <- Listeners],
-    [ok = gp:call(TTid, {remove_listener, Tid}) || TTid <- Transmitters],
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+%% Internal
+
+%% @doc return updated State with listener and monitor ref added if not already present
+add_listener(Tid, #state{listeners=Listeners, ref_tids=RefTids}=State) ->
+    case lists:member(Tid, Listeners) of
+        false ->
+            ListenerPid = gp:whereis(Tid),
+            Ref = erlang:monitor(process, ListenerPid),
+            State#state{listeners=[Tid|Listeners], ref_tids=[{Ref,Tid}|RefTids]};
+        true ->
+            State
+    end.

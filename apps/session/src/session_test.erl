@@ -26,7 +26,6 @@ t_session_lifecycle() ->
     ?assertEqual(Pid2, gp:whereis(S2)),
     ok = session:subscribe(S1, S2),
     ?assertEqual([S2], gp:call(S1, listeners)),
-    ?assertEqual([S1], gp:call(S2, transmitters)),
     gp:cast(S1, {notify_listeners, first_post}),
     sys:get_status(Pid2), % in order to sync
     gp:cast(S1, {notify_listeners, second_post}),

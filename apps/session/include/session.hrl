@@ -1,9 +1,8 @@
 -record(state, {tid,
                 created=os:timestamp(),
                 listeners=[],
-                transmitters=[],
                 notifications=[],
-                refs=[],
+                ref_tids=[],
                 type_state}).
 
 -compile([{parse_transform, lager_transform}]).

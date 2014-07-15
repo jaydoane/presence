@@ -10,14 +10,15 @@
 
 -export([add_listener/2]).
 
+%% API
+
 start_link(Tid, Opts) ->
     gen_server:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
 stop(Tid) ->
     gen_server:call(gp:whereis(Tid), stop).
 
-
-%% Behaviour functions
+%% Behaviour
 
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),

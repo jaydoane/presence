@@ -37,9 +37,8 @@ handle_call(stop, _From, State) ->
 handle_call({add_listener, Tid}=_Msg, _From, State) ->
     {reply, ok, add_listener(Tid, State)};
 
-handle_call({remove_listener, Tid}=_Msg, _From, #state{listeners=Listeners, ref_tids=RefTids}=State) ->
-    ListenerRefTids = [{R,T} || {R,T} <- RefTids, T =:= Tid],
-    {reply, ok, State#state{listeners=Listeners--Tid, ref_tids=RefTids--ListenerRefTids}};
+handle_call({remove_listener, Tid}=_Msg, _From, State) ->
+    {reply, ok, remove_listener(Tid, State)};
 
 handle_call(listeners, _From, #state{listeners=Listeners}=State) ->
     {reply, Listeners, State};
@@ -76,14 +75,9 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 
-handle_info({'DOWN', Ref, process, Pid, Reason},
-            #state{listeners=Listeners, ref_tids=RefTids}=State) ->
-    ?info("Pid ~p exited reason ~p", [Pid, Reason]),
-    DownRefTids = [{R,T} || {R,T} <- RefTids, R =:= Ref],
-    ?info("DownRefTids ~p", [DownRefTids]),
-    DownTids = [T || {_R,T} <- DownRefTids],
-    ?info("DownTids ~p", [DownTids]),
-    {noreply, State#state{listeners=Listeners--DownTids, ref_tids=RefTids--DownRefTids}};
+handle_info({'DOWN', Ref, process, Pid, Reason}, State) ->
+    ?info("Pid ~p 'DOWN' reason ~p", [Pid, Reason]),
+    {noreply, remove_ref(Ref, State)};
     
 handle_info(_Msg, State) ->
     ?info("unhandled info ~p", [_Msg]),
@@ -99,13 +93,24 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Internal
 
-%% @doc return updated State with listener and monitor ref added if not already present
-add_listener(Tid, #state{listeners=Listeners, ref_tids=RefTids}=State) ->
-    case lists:member(Tid, Listeners) of
-        false ->
-            ListenerPid = gp:whereis(Tid),
-            Ref = erlang:monitor(process, ListenerPid),
-            State#state{listeners=[Tid|Listeners], ref_tids=[{Ref,Tid}|RefTids]};
-        true ->
+%% @doc return updated state with {Tid, Ref} added to listeners if not already present
+add_listener(Tid, #state{listeners=Listeners}=State) ->
+    case proplists:get_value(Tid, Listeners) of
+        undefined ->
+            Pid = gp:whereis(Tid), % TODO: handle possible race if Tid process dies before here?
+            Ref = erlang:monitor(process, Pid),
+            State#state{listeners=[{Tid,Ref}|Listeners]};
+        _ ->
             State
     end.
+
+%% @doc return updated state with Tid removed from listeners if present
+remove_listener(Tid, #state{listeners=Listeners}=State) ->
+    Remove = [{T,R} || {T,R} <- Listeners, T =:= Tid],
+    State#state{listeners=Listeners--Remove}.
+
+%% @doc return updated state with Ref removed from listeners if present
+remove_ref(Ref, #state{listeners=Listeners}=State) ->
+    Remove = [{T,R} || {T,R} <- Listeners, R =:= Ref],
+    ?info("removing ~p", [Remove]),
+    State#state{listeners=Listeners--Remove}.

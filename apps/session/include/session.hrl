@@ -1,8 +1,11 @@
--record(state, {tid,
+-type type() :: atom().
+-type id() :: integer().
+-type tid() :: {type(), id()}.
+
+-record(state, {tid :: tid(),
                 created=os:timestamp(),
-                listeners=[],
+                listeners=[] :: [{tid(), reference()}],
                 notifications=[],
-                ref_tids=[],
                 type_state}).
 
 -compile([{parse_transform, lager_transform}]).

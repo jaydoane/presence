@@ -10,14 +10,14 @@
 
 -define(SERVER, ?MODULE).
 
-start_link(LSock) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [LSock]).
+start_link(Listen) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Listen]).
 
 start_child() ->
     supervisor:start_child(?SERVER, []).
 
-init([LSock]) ->
-    Server = {ti_server, {ti_server, start_link, [LSock]},
+init([Listen]) ->
+    Server = {ti_server, {ti_server, start_link, [Listen]},
               temporary, brutal_kill, worker, [ti_server]},
     Children = [Server],
     RestartStrategy = {simple_one_for_one, 0, 1},

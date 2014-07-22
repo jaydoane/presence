@@ -376,7 +376,7 @@ timer_timeout(SysTime) ->
     end.
 
 -define(MIN_SKIP_COUNT, 10). % don't skip if number of ticks behind is less than this
-new_time_maybe_skipping_forward(NewTime, SysTime, Interv, TimerEntry) when NewTime < SysTime ->
+new_time_maybe_skipping_forward(NewTime, SysTime, Interv, _TimerEntry) when NewTime < SysTime ->
     %% if next tick is still behind "now", determine how far behind
     %% (a sign of sudden clock jump forward), and maybe skip many ticks at once
     SkipCount = (SysTime - NewTime + Interv - 1) div Interv,
@@ -385,9 +385,9 @@ new_time_maybe_skipping_forward(NewTime, SysTime, Interv, TimerEntry) when NewTi
             NewTime;
         true -> % skip ahead so that next tick is after current time
             SkipAmount = SkipCount * Interv,
-            error_logger:info_msg("Detected time forward jump (or big erlang scheduling latency). "
-                                  "Skipping ~w samples (or ~w milliseconds) (~p)",
-                                  [SkipCount, SkipAmount, TimerEntry]),
+            %% error_logger:info_msg("Detected time forward jump (or big erlang scheduling latency). "
+            %%                       "Skipping ~w samples (or ~w milliseconds) (~p)",
+            %%                       [SkipCount, SkipAmount, TimerEntry]),
             NewTime + SkipAmount
     end;
 new_time_maybe_skipping_forward(NewTime, _SysTime, _Interv, _TimerEntry) ->

@@ -1,0 +1,6 @@
+%% -*- mode: erlang;erlang-indent-level: 4;indent-tabs-mode: nil -*-
+
+%% Named fun (OTP > 17)
+F = fun Fact(0) -> 1; 
+        Fact(N) -> N * Fact(N - 1) 
+    end.

@@ -1,0 +1,6 @@
+{application, ride,
+ [{description, "A ride app"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [kernel, stdlib, entity]}
+ ]}.

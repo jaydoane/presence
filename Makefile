@@ -60,7 +60,7 @@ doc:
 	$(REBAR) skip_deps=true doc
 
 eunit: compile clean-common-test-data
-	ERL_FLAGS="-config app" $(REBAR) compile eunit skip_deps=true apps=session
+	ERL_FLAGS="-config app" $(REBAR) compile eunit skip_deps=true apps=ride
 
 test: compile eunit
 

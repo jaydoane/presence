@@ -5,3 +5,5 @@ ebin*
 *.beam
 apps/*/.rebar/erlcinfo
 .rebar/erlcinfo
+release*
+reltool*

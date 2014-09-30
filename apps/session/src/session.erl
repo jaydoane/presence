@@ -17,7 +17,7 @@ start(Tid, Opts) ->
     session_sup:start_child(Tid, Opts).
 
 stop(Tid) ->
-    session_server:stop(Tid).
+    gen_session:stop(Tid).
 
 start_count(Type, Count) ->
     [start({Type,N}) || N <- lists:seq(1,Count)].

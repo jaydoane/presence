@@ -1,12 +1,15 @@
 -type type() :: atom().
 -type id() :: integer().
 -type tid() :: {type(), id()}.
+-type sub() :: {reference(), tid()}. % subscriber/listener
 
 -record(state, {tid :: tid(),
                 created=os:timestamp(),
                 listeners=[] :: [{tid(), reference()}],
                 notifications=[],
-                type_state}).
+                subs=[] :: [sub()],
+                msgs=[] :: [term()],
+                type_state :: term()}).
 
 -compile([{parse_transform, lager_transform}]).
 

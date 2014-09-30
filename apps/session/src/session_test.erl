@@ -14,7 +14,7 @@ session_test_() ->
              ok = application:stop(session)
      end,
      [
-      {spawn, ?_test(?debugVal(t_session_lifecycle()))} 
+      %% {spawn, ?_test(?debugVal(t_session_lifecycle()))} 
      ]}.
 
 t_session_lifecycle() ->

@@ -1,0 +1,4 @@
+-type type() :: atom().
+-type id() :: integer().
+-type tid() :: {type(), id()}.
+-type sub() :: {tid(), pid(), reference()}. % state change subscriber

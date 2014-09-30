@@ -1,0 +1,7 @@
+{application, entity,
+ [{description, "An app for modeling entity states and interactions within a domain"},
+  {vsn, "0.1"},
+  {registered, []},
+  {applications, [kernel, stdlib, lager]},
+  {mod, {entity_app, []}}
+ ]}.

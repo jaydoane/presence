@@ -1,2 +1,3 @@
-Generalized publish-subscribe, where any session can be a listener to, 
-and transmitter for, an arbitrary number of other sessions.
+apps/entity contains a behaviour for generically modeling entity state interactions
+
+apps/ride contains proof of concept domain of hailing and riding in a taxi

@@ -10,8 +10,8 @@
 
 -behaviour(gen_fsm).
 
--include_lib("domain/include/log.hrl").
--include_lib("domain/include/entity.hrl").
+-include_lib("entity/include/log.hrl").
+-include_lib("entity/include/entity.hrl").
 
 %% API
 -export([start_link/2, subs/1, state_name/1, send_subs_event/2]).

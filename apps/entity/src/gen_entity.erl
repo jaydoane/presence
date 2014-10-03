@@ -2,6 +2,12 @@
 %%% @author Jay Doane <jay.s.doane@gmail.com>
 %%% @copyright (C) 2014, Jay Doane
 %%% @doc
+%%%
+%%% Because the term `state' generally refers to the current state _name_ that a FSM is in
+%%% rather than the state data, we use the variable State to refer to the state name and
+%%% Data to refer to state data. This is unlike typical non-FSM based servers, where
+%%% State refers to state data, and the state name is not explicit.
+%%%
 %%% http://erlangcentral.org/wiki/index.php?title=Cascading_Behaviours
 %%% @end
 %%% Created : 22 Sep 2014 by Jay Doane <jay.s.doane@gmail.com>
@@ -31,9 +37,9 @@ behaviour_info(callbacks) ->
     [{init,1},{handle_event,3},{handle_sync_event,4},
      {handle_info,3}, {terminate,3},{code_change,4}].
 
--record(data, {tid, created=os:timestamp(),
-               module, entity_state_name, entity_state_data,
-               subs=[] :: [sub()]}).
+-record(gen_data, {tid, created=os:timestamp(),
+                   module, entity_state, entity_data,
+                   subs=[] :: [sub()]}).
 
 %%%===================================================================
 %%% API
@@ -68,7 +74,7 @@ send_subs_event({_,_}=Tid, Event) ->
 %%%===================================================================
 %%% gen_fsm passthroughs with name lookup conversions for Tids
 %%%===================================================================
- 
+
 send_event({_,_}=Tid, Event) ->
     send_event(gp:whereis(Tid), Event);
 send_event(Name, Event) ->
@@ -122,8 +128,8 @@ reply(Caller, Reply) ->
 %% gen_fsm:start_link/[3,4], this function is called by the new
 %% process to initialize.
 %%
-%% @spec init(Args) -> {ok, StateName, State} |
-%%                     {ok, StateName, State, Timeout} |
+%% @spec init(Args) -> {ok, State, Data} |
+%%                     {ok, State, Data, Timeout} |
 %%                     ignore |
 %%                     {stop, StopReason}
 %% @end
@@ -131,17 +137,17 @@ reply(Caller, Reply) ->
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
     case Type:init([Tid, Opts]) of
-        {ok, EntityStateName, EntityStateData} ->
-            io:fwrite("    {ok, ~p, ~p}~n", [EntityStateName, EntityStateData]),
-            StateData = #data{tid=Tid, module=Type, entity_state_name=EntityStateName,
-                               entity_state_data=EntityStateData},
-            {ok, state, StateData};
-        {ok, EntityStateName, EntityStateData, Timeout} ->
+        {ok, EntityState, EntityData} ->
+            io:fwrite("    {ok, ~p, ~p}~n", [EntityState, EntityData]),
+            Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
+                             entity_data=EntityData},
+            {ok, state, Data};
+        {ok, EntityState, EntityData, Timeout} ->
             io:fwrite("    {ok, ~p, ~p, ~p}~n",
-                      [EntityStateName, EntityStateData, Timeout]),
-            StateData = #data{tid=Tid, module=Type, entity_state_name=EntityStateName,
-                               entity_state_data=EntityStateData},
-            {ok, state, StateData, Timeout};
+                      [EntityState, EntityData, Timeout]),
+            Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
+                             entity_data=EntityData},
+            {ok, state, Data, Timeout};
         {stop, Reason} ->
             io:fwrite("    {stop, ~p}~n", [Reason]),
             {stop, Reason};
@@ -156,21 +162,21 @@ init([{Type,_Id}=Tid, Opts]) ->
 %% There should be one instance of this function for each possible
 %% state name. Whenever a gen_fsm receives an event sent using
 %% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
+%% name as the current state name State is called to handle
 %% the event. It is also called if a timeout occurs.
 %%
 %% @spec state_name(Event, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-state(Event, #data{module=Module, entity_state_data=EntityStateData,
-                    entity_state_name=EntityStateName}=StateData) ->
+state(Event, #gen_data{module=Module, entity_data=EntityData,
+                       entity_state=EntityState}=Data) ->
     io:fwrite("~p:~p(~p, ~p) ->~n",
-        [Module, EntityStateName, Event, EntityStateData]),
-    Result = Module:EntityStateName(Event, EntityStateData),
-    handle_result(Result, state, StateData).
+              [Module, EntityState, Event, EntityData]),
+    Result = Module:EntityState(Event, EntityData),
+    handle_result(Result, state, Data).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -178,27 +184,27 @@ state(Event, #data{module=Module, entity_state_data=EntityStateData,
 %% There should be one instance of this function for each possible
 %% state name. Whenever a gen_fsm receives an event sent using
 %% gen_fsm:sync_send_event/[2,3], the instance of this function with
-%% the same name as the current state name StateName is called to
+%% the same name as the current state name State is called to
 %% handle the event.
 %%
 %% @spec state_name(Event, From, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {reply, Reply, NextState, NextData} |
+%%                   {reply, Reply, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData} |
+%%                   {stop, Reason, Reply, NewData}
 %% @end
 %%--------------------------------------------------------------------
 %% state_name(_Event, _From, State) ->
 %%     Reply = ok,
 %%     {reply, Reply, state_name, State}.
-state(Event, From, #data{module=Module, entity_state_data=EntityStateData,
-                          entity_state_name=EntityStateName}=StateData) ->
+state(Event, From, #gen_data{module=Module, entity_data=EntityData,
+                             entity_state=EntityState}=Data) ->
     io:fwrite("~p:~p(~p, ~p, ~p) ->~n",
-        [Module, EntityStateName, Event, From, EntityStateData]),
-    Result = Module:EntityStateName(Event, From, EntityStateData),
-    handle_result(Result, state, StateData).
+              [Module, EntityState, Event, From, EntityData]),
+    Result = Module:EntityState(Event, From, EntityData),
+    handle_result(Result, state, Data).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -207,34 +213,34 @@ state(Event, From, #data{module=Module, entity_state_data=EntityStateData,
 %% gen_fsm:send_all_state_event/2, this function is called to handle
 %% the event.
 %%
-%% @spec handle_event(Event, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%% @spec handle_event(Event, State, Data) ->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-%% handle_event(_Event, StateName, State) ->
-%%     {next_state, StateName, State}.
+%% handle_event(_Event, State, Data) ->
+%%     {next_state, State, Data}.
 
-handle_event({subscribe, Tid}, StateName, State) ->
-    {next_state, StateName, subscribe(Tid, State)};
+handle_event({subscribe, Tid}, State, Data) ->
+    {next_state, State, subscribe(Tid, Data)};
 
-handle_event({remove_sub, Sub}=Event, StateName, State) ->
+handle_event({remove_sub, Sub}=Event, State, Data) ->
     ?info("~p", [Event]),
-    {next_state, StateName, remove_sub(Sub, State)};
+    {next_state, State, remove_sub(Sub, Data)};
 
-handle_event({notify_subs, Notification}, StateName, #data{subs=Subs}=State) ->
+handle_event({notify_subs, Notification}, State, #gen_data{subs=Subs}=Data) ->
     ?info("{notify_subs ~p}", [Notification]),
     [send_all_state_event(Pid, {notify, Notification}) || {_Tid,Pid,_Ref} <- Subs],
-    {next_state, StateName, State};
+    {next_state, State, Data};
 
-handle_event(Event, StateName, #data{module=Module, entity_state_name=EntityStateName,
-                                      entity_state_data=EntityStateData}=StateData) ->
-    ?info("~p ~p", [Event, StateName]),
+handle_event(Event, State, #gen_data{module=Module, entity_state=EntityState,
+                                     entity_data=EntityData}=Data) ->
+    ?info("~p ~p", [Event, State]),
     io:fwrite("~p:handle_event(~p, ~p, ~p) ->~n",
-              [Module, Event, EntityStateName, EntityStateData]),
-    Result = Module:handle_event(Event, EntityStateName, EntityStateData),
-    handle_result(Result, StateName, StateData).
+              [Module, Event, EntityState, EntityData]),
+    Result = Module:handle_event(Event, EntityState, EntityData),
+    handle_result(Result, State, Data).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -243,33 +249,32 @@ handle_event(Event, StateName, #data{module=Module, entity_state_name=EntityStat
 %% gen_fsm:sync_send_all_state_event/[2,3], this function is called
 %% to handle the event.
 %%
-%% @spec handle_sync_event(Event, From, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
+%% @spec handle_sync_event(Event, From, State, Data) ->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {reply, Reply, NextState, NextData} |
+%%                   {reply, Reply, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData} |
+%%                   {stop, Reason, Reply, NewData}
 %% @end
 %%--------------------------------------------------------------------
-%% handle_sync_event(_Event, _From, StateName, State) ->
+%% handle_sync_event(_Event, _From, State, Data) ->
 %%     Reply = ok,
-%%     {reply, Reply, StateName, State}.
+%%     {reply, Reply, State, Data}.
 
-handle_sync_event(subs, _From, StateName, #data{subs=Subs}=StateData) ->
-    {reply, Subs, StateName, StateData};
+handle_sync_event(subs, _From, State, #gen_data{subs=Subs}=Data) ->
+    {reply, Subs, State, Data};
 
-handle_sync_event(state_name, _From, StateName,
-                  #data{entity_state_name=EntityStateName}=StateData) ->
-    {reply, EntityStateName, StateName, StateData};
+handle_sync_event(state_name, _From, State, #gen_data{entity_state=EntityState}=Data) ->
+    {reply, EntityState, State, Data};
 
-handle_sync_event(Event, From, StateName,
-                  #data{module=Module, entity_state_name=EntityStateName,
-                         entity_state_data=EntityStateData}=StateData) ->
+handle_sync_event(Event, From, State,
+                  #gen_data{module=Module, entity_state=EntityState,
+                            entity_data=EntityData}=Data) ->
     io:fwrite("~p:handle_sync_event(~p, ~p, ~p, ~p) ->~n",
-              [Module, Event, From, EntityStateName, EntityStateData]),
-    Result = Module:handle_sync_event(Event, From, EntityStateName, EntityStateData),
-    handle_result(Result, StateName, StateData).
+              [Module, Event, From, EntityState, EntityData]),
+    Result = Module:handle_sync_event(Event, From, EntityState, EntityData),
+    handle_result(Result, State, Data).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -278,25 +283,25 @@ handle_sync_event(Event, From, StateName,
 %% message other than a synchronous or asynchronous event
 %% (or a system message).
 %%
-%% @spec handle_info(Info,StateName,State)->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%% @spec handle_info(Info,State,Data)->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-%% handle_info(_Info, StateName, State) ->
-%%     {next_state, StateName, State}.
+%% handle_info(_Info, State, Data) ->
+%%     {next_state, State, Data}.
 
-handle_info({'DOWN', Ref, process, Pid, Reason}, StateName, State) ->
+handle_info({'DOWN', Ref, process, Pid, Reason}, State, Data) ->
     ?info("Pid ~p 'DOWN' reason ~p", [Pid, Reason]),
-    {next_state, StateName, remove_sub(Ref, State)};
-    
-handle_info(Info, StateName, #data{module=Module, entity_state_name=EntityStateName,
-                                      entity_state_data=EntityStateData}=StateData) ->
+    {next_state, State, remove_sub(Ref, Data)};
+
+handle_info(Info, State, #gen_data{module=Module, entity_state=EntityState,
+                                   entity_data=EntityData}=Data) ->
     io:fwrite("~p:handle_info(~p, ~p, ~p) ->~n",
-              [Module, Info, EntityStateName, EntityStateData]),
-    Result = Module:handle_info(Info, EntityStateName, EntityStateData),
-    handle_result(Result, StateName, StateData).
+              [Module, Info, EntityState, EntityData]),
+    Result = Module:handle_info(Info, EntityState, EntityData),
+    handle_result(Result, State, Data).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -306,41 +311,41 @@ handle_info(Info, StateName, #data{module=Module, entity_state_name=EntityStateN
 %% necessary cleaning up. When it returns, the gen_fsm terminates with
 %% Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, StateName, State) -> void()
+%% @spec terminate(Reason, State, Data) -> void()
 %% @end
 %%--------------------------------------------------------------------
-%% terminate(_Reason, _StateName, _State) ->
+%% terminate(_Reason, _State, _Data) ->
 %%     ok.
 
-terminate(Reason, _StateName, #data{module=Module, entity_state_name=EntityStateName,
-                                    entity_state_data=EntityStateData}) ->
+terminate(Reason, _State, #gen_data{module=Module, entity_state=EntityState,
+                                    entity_data=EntityData}) ->
     io:fwrite("~p:terminate(~p, ~p, ~p) ->~n",
-        [Module, Reason, EntityStateName, EntityStateData]),
-    Module:terminate(Reason, EntityStateName, EntityStateData).
+              [Module, Reason, EntityState, EntityData]),
+    Module:terminate(Reason, EntityState, EntityData).
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Convert process state when code is changed
 %%
-%% @spec code_change(OldVsn, StateName, State, Extra) ->
-%%                   {ok, StateName, NewState}
+%% @spec code_change(OldVsn, State, Data, Extra) ->
+%%                   {ok, State, NewData}
 %% @end
 %%--------------------------------------------------------------------
-%% code_change(_OldVsn, StateName, State, _Extra) ->
-%%     {ok, StateName, State}.
+%% code_change(_OldVsn, State, Data, _Extra) ->
+%%     {ok, State, Data}.
 
-code_change(OldVsn, StateName, #data{module=Module, entity_state_name=EntityStateName,
-                                      entity_state_data=EntityStateData}=StateData, Extra) ->
+code_change(OldVsn, State, #gen_data{module=Module, entity_state=EntityState,
+                                     entity_data=EntityData}=Data, Extra) ->
     io:fwrite("~p:code_change(~p, ~p, ~p, ~p) ->~n",
-        [Module, OldVsn, EntityStateName, EntityStateData, Extra]),
-    case Module:code_change(OldVsn, EntityStateName, EntityStateData, Extra) of
-        {ok, NewEntityStateName, NewEntityStateData} ->
+              [Module, OldVsn, EntityState, EntityData, Extra]),
+    case Module:code_change(OldVsn, EntityState, EntityData, Extra) of
+        {ok, NewEntityState, NewEntityData} ->
             io:fwrite("    {ok, ~p, ~p}~n",
-                NewEntityStateName, NewEntityStateData),
-            NewStateData = StateData#data{entity_state_name = NewEntityStateName,
-                                           entity_state_data = NewEntityStateData},
-            {ok, StateName, NewStateData};
+                      NewEntityState, NewEntityData),
+            NewData = Data#gen_data{entity_state = NewEntityState,
+                                    entity_data = NewEntityData},
+            {ok, State, NewData};
         Else ->
             Else
     end.
@@ -349,64 +354,54 @@ code_change(OldVsn, StateName, #data{module=Module, entity_state_name=EntityStat
 %%% Internal functions
 %%%===================================================================
 
-notify_subs_if_entity_state_changed(_EntityStateName,
-                                    #data{entity_state_name=_EntityStateName}) ->
+notify_subs_if_entity_state_changed(_EntityState, #gen_data{entity_state=_EntityState}) ->
     ok;
-notify_subs_if_entity_state_changed(NewEntityStateName,
-                                    #data{tid=Tid, entity_state_name=_EntityStateName,
-                                           subs=Subs}) ->
-    ?info("~p", [NewEntityStateName]),
-    [send_event(P, {NewEntityStateName, Tid}) || {_T,P,_R} <- Subs],
+notify_subs_if_entity_state_changed(NewEntityState, #gen_data{tid=Tid, entity_state=_EntityState,
+                                                              subs=Subs}) ->
+    ?info("~p", [NewEntityState]),
+    [send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs],
     ok.
 
 %% This function handles the common result set of callbacks.
- 
-handle_result({next_state, NewEntityStateName, NewEntityStateData}, StateName, StateData) ->
-    io:fwrite("    {next_state, ~p, ~p}~n", [NewEntityStateName, NewEntityStateData]),
-    NewStateData = StateData#data{entity_state_name =  NewEntityStateName,
-                                   entity_state_data =NewEntityStateData},
-    notify_subs_if_entity_state_changed(NewEntityStateName, StateData),
-    {next_state, StateName, NewStateData};
-handle_result({next_state, NewEntityStateName, NewEntityStateData, Timeout},
-              StateName, StateData) ->
+
+handle_result({next_state, NewEntityState, NewEntityData}, State, Data) ->
+    io:fwrite("    {next_state, ~p, ~p}~n", [NewEntityState, NewEntityData]),
+    NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
+    notify_subs_if_entity_state_changed(NewEntityState, Data),
+    {next_state, State, NewData};
+handle_result({next_state, NewEntityState, NewEntityData, Timeout}, State, Data) ->
     io:fwrite("    {next_state, ~p, ~p, ~p}~n",
-              [NewEntityStateName, NewEntityStateData, Timeout]),
-    NewStateData = StateData#data{entity_state_name =  NewEntityStateName,
-                                   entity_state_data =NewEntityStateData},
-    notify_subs_if_entity_state_changed(NewEntityStateName, StateData),
-    {next_state, StateName, NewStateData, Timeout};
-handle_result({reply, Reply, NewEntityStateName, NewEntityStateData},
-              StateName, StateData) ->
+              [NewEntityState, NewEntityData, Timeout]),
+    NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
+    notify_subs_if_entity_state_changed(NewEntityState, Data),
+    {next_state, State, NewData, Timeout};
+handle_result({reply, Reply, NewEntityState, NewEntityData}, State, Data) ->
     io:fwrite("    {reply, ~p, ~p, ~p}~n",
-              [Reply, NewEntityStateName, NewEntityStateData]),
-    NewStateData = StateData#data{entity_state_name =  NewEntityStateName,
-                                   entity_state_data =NewEntityStateData},
-    notify_subs_if_entity_state_changed(NewEntityStateName, StateData),
-    {reply, Reply, StateName, NewStateData};
-handle_result({reply, Reply, NewEntityStateName, NewEntityStateData, Timeout},
-              StateName, StateData) ->
+              [Reply, NewEntityState, NewEntityData]),
+    NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
+    notify_subs_if_entity_state_changed(NewEntityState, Data),
+    {reply, Reply, State, NewData};
+handle_result({reply, Reply, NewEntityState, NewEntityData, Timeout}, State, Data) ->
     io:fwrite("    {reply, ~p, ~p, ~p, ~p}~n",
-              [Reply, NewEntityStateName, NewEntityStateData, Timeout]),
-    NewStateData = StateData#data{entity_state_name =  NewEntityStateName,
-                                   entity_state_data =NewEntityStateData},
-    notify_subs_if_entity_state_changed(NewEntityStateName, StateData),
-    {reply, Reply, StateName, NewStateData, Timeout};
-handle_result({stop, Reason, NewEntityStateData}, _StateName, StateData) ->
-    io:fwrite("    {stop, ~p, ~p}~n", [Reason, NewEntityStateData]),
-    NewStateData = StateData#data{entity_state_data =NewEntityStateData},
-    {stop, Reason, NewStateData};
-handle_result({stop, Reason, Reply, NewEntityStateData},
-              _StateName, StateData) ->
-    io:fwrite("    {stop, ~p, ~p, ~p}~n", [Reason, Reply, NewEntityStateData]),
-    NewStateData = StateData#data{entity_state_data =NewEntityStateData},
-    {stop, Reason, Reply, NewStateData};
-handle_result(Other, _StateName, _StateData) ->
+              [Reply, NewEntityState, NewEntityData, Timeout]),
+    NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
+    notify_subs_if_entity_state_changed(NewEntityState, Data),
+    {reply, Reply, State, NewData, Timeout};
+handle_result({stop, Reason, NewEntityData}, _State, Data) ->
+    io:fwrite("    {stop, ~p, ~p}~n", [Reason, NewEntityData]),
+    NewData = Data#gen_data{entity_data = NewEntityData},
+    {stop, Reason, NewData};
+handle_result({stop, Reason, Reply, NewEntityData}, _State, Data) ->
+    io:fwrite("    {stop, ~p, ~p, ~p}~n", [Reason, Reply, NewEntityData]),
+    NewData = Data#gen_data{entity_data = NewEntityData},
+    {stop, Reason, Reply, NewData};
+handle_result(Other, _State, _Data) ->
     io:fwrite("    ~p~n", [Other]),
     Other.
 
 %% subscriptions and notifications
 
-subscribe(Tid, #data{subs=Subs}=State) ->
+subscribe(Tid, #gen_data{subs=Subs}=State) ->
     ?info("~p", [Tid]),
     case proplists:get_value(Tid, Subs) of
         undefined ->
@@ -415,20 +410,20 @@ subscribe(Tid, #data{subs=Subs}=State) ->
                     State;
                 Pid ->
                     Ref = erlang:monitor(process, Pid),
-                    State#data{subs = [{Tid,Pid,Ref}|Subs]}
+                    State#gen_data{subs = [{Tid,Pid,Ref}|Subs]}
             end;
         _ ->
             State
     end.
 
-remove_sub({_Type,_Id}=Tid, #data{subs=Subs}=State) ->
+remove_sub({_Type,_Id}=Tid, #gen_data{subs=Subs}=State) ->
     Remove = [{T,P,R} || {T,P,R} <- Subs, T =:= Tid],
     remove(Remove, Subs, State);
-remove_sub(Ref, #data{subs=Subs}=State) when is_reference(Ref) ->
+remove_sub(Ref, #gen_data{subs=Subs}=State) when is_reference(Ref) ->
     Remove = [{T,P,R} || {T,P,R} <- Subs, R =:= Ref],
     remove(Remove, Subs, State).
-    
+
 remove(Remove, Subs, State) ->
     ?info("removing ~p", [Remove]),
-    State#data{subs = Subs--Remove}.
-    
+    State#gen_data{subs = Subs--Remove}.
+

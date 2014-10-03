@@ -8,15 +8,18 @@
 hail_test_() ->
     {setup,
      fun() ->
+             error_logger:tty(false),
              ok = mnesia:start(),
-             {ok, _Started} = application:ensure_all_started(entity) end,
+             {ok, _Started} = application:ensure_all_started(entity),
+             lager:set_loglevel(lager_console_backend, error),
+             ok end,
      fun(_) ->
              ok = application:stop(entity),
              ok = application:stop(lager),
              ok = application:stop(goldrush),
              mnesia:stop(),
-             ok
-     end,
+             error_logger:tty(true),
+             ok end,
      [
       {spawn, ?_test(?debugVal(t_order_cancel()))} 
      ]}.

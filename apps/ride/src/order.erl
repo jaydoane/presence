@@ -19,7 +19,7 @@
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% order states
--export([processing/3, canceled/2, completed/2]).
+-export([processing/2, processing/3, canceled/2, completed/2]).
 
 -define(SERVER, ?MODULE).
 
@@ -91,14 +91,11 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-%% processing(complete, State) ->
-%%     {next_state, completed, State};
-%% processing(cancel, State) ->
-%%     %% notify_subs(cancel, State),
-%%     {next_state, canceled, State};
-%% processing(Event, State) ->
-%%     ?info("illegal state change ~p", [Event]),
-%%     {next_state, processing, State}.
+
+processing({timed_out, Hail}, State) ->
+    ?trace([Hail]),
+    gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
+    {next_state, processing, State}.
 
 canceled(Event, State) ->
     ?info("illegal state change ~p", [Event]),
@@ -107,9 +104,6 @@ canceled(Event, State) ->
 completed(Event, State) ->
     ?info("illegal state change ~p", [Event]),
     {next_state, canceled, State}.
-
-%% notify_subs(StateName, #state{tid=Tid, rider=Rider}) ->
-%%     gen_fsm:send_event(gp:whereis(Rider), {Tid, StateName}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -129,12 +123,12 @@ completed(Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-processing(complete, _From, #state{tid=Tid}=State) ->
-    gen_entity:send_subs_event(Tid, {completed, Tid}), % TODO: sync?
+processing(complete, _From, #state{tid=Tid, rider=Rider}=State) ->
+    %% gen_entity:send_subs_event(Tid, {completed, Tid}), % TODO: sync?
+    gen_entity:send_all_state_event(Tid, {remove_sub, Rider}),
     {reply, {ok, complete}, completed, State};
 processing({cancel, _Reason}=Event, _From, #state{tid=Tid, rider=Rider}=State) ->
     ?info("~p ~p", [Event, Tid]),
-    %% gen_entity:send_subs_event(Tid, {canceled, Tid}), % TODO: sync?
     gen_entity:send_all_state_event(Tid, {remove_sub, Rider}),
     {reply, {ok, canceled}, canceled, State};
 processing(Event, From, State) ->
@@ -173,9 +167,6 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(get_tid, _From, StateName, #state{tid=Tid}=State) ->
-    Reply = Tid,
-    {reply, Reply, StateName, State};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.

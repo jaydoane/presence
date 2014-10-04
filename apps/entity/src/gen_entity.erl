@@ -20,7 +20,7 @@
 -include_lib("entity/include/entity.hrl").
 
 %% API
--export([start_link/2, subs/1, state_name/1, send_subs_event/2]).
+-export([start_link/2, subs/1, state/1, send_subs_event/2, remove_subs/1]).
 
 %% gen_fsm callbacks
 -export([init/1, state/2, state/3, handle_event/3,
@@ -62,14 +62,17 @@ start_link(Tid, Opts) ->
 %%     sync_send_event(gp:whereis(Tid), Event).
 
 subs({_,_}=Tid) ->
-    sync_send_all_state_event(gp:whereis(Tid), subs).
+    sync_send_all_state_event(Tid, subs).
 
-state_name({_,_}=Tid) ->
-    sync_send_all_state_event(gp:whereis(Tid), state_name).
+state({_,_}=Tid) ->
+    sync_send_all_state_event(Tid, state).
 
 send_subs_event({_,_}=Tid, Event) ->
     ?info("~p, ~p", [Tid, Event]),
-    send_all_state_event(gp:whereis(Tid), {subs, Event}).
+    send_all_state_event(Tid, {subs, Event}).
+
+remove_subs(Tid) ->
+    send_all_state_event(Tid, remove_subs).
 
 %%%===================================================================
 %%% gen_fsm passthroughs with name lookup conversions for Tids
@@ -222,8 +225,11 @@ state(Event, From, #gen_data{module=Module, entity_data=EntityData,
 %% handle_event(_Event, State, Data) ->
 %%     {next_state, State, Data}.
 
-handle_event({subscribe, Tid}, State, Data) ->
-    {next_state, State, subscribe(Tid, Data)};
+handle_event({subscribe, Name}, State, Data) ->
+    {next_state, State, subscribe(Name, Data)};
+
+handle_event(remove_subs, State, Data) ->
+    {next_state, State, Data#gen_data{subs=[]}};
 
 handle_event({remove_sub, Sub}=Event, State, Data) ->
     ?info("~p", [Event]),
@@ -265,12 +271,11 @@ handle_event(Event, State, #gen_data{module=Module, entity_state=EntityState,
 handle_sync_event(subs, _From, State, #gen_data{subs=Subs}=Data) ->
     {reply, Subs, State, Data};
 
-handle_sync_event(state_name, _From, State, #gen_data{entity_state=EntityState}=Data) ->
+handle_sync_event(state, _From, State, #gen_data{entity_state=EntityState}=Data) ->
     {reply, EntityState, State, Data};
 
-handle_sync_event(Event, From, State,
-                  #gen_data{module=Module, entity_state=EntityState,
-                            entity_data=EntityData}=Data) ->
+handle_sync_event(Event, From, State, #gen_data{module=Module, entity_state=EntityState,
+                                                entity_data=EntityData}=Data) ->
     io:fwrite("~p:handle_sync_event(~p, ~p, ~p, ~p) ->~n",
               [Module, Event, From, EntityState, EntityData]),
     Result = Module:handle_sync_event(Event, From, EntityState, EntityData),
@@ -354,13 +359,26 @@ code_change(OldVsn, State, #gen_data{module=Module, entity_state=EntityState,
 %%% Internal functions
 %%%===================================================================
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+notify_subs_if_entity_state_changed_test() ->
+    {ok, 0} = notify_subs_if_entity_state_changed(state, #gen_data{entity_state=state}),
+    Tid = {foo,1},
+    {ok, 1} = notify_subs_if_entity_state_changed(
+                state, #gen_data{tid=Tid, entity_state=different_state,
+                                 subs=[{Tid,self(),make_ref()}]}),
+    ok.
+-endif.
+
+
 notify_subs_if_entity_state_changed(_EntityState, #gen_data{entity_state=_EntityState}) ->
-    ok;
+    {ok, 0};
 notify_subs_if_entity_state_changed(NewEntityState, #gen_data{tid=Tid, entity_state=_EntityState,
                                                               subs=Subs}) ->
     ?info("~p", [NewEntityState]),
-    [send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs],
-    ok.
+    Count = length([send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs]),
+    {ok, Count}.
 
 %% This function handles the common result set of callbacks.
 
@@ -401,16 +419,16 @@ handle_result(Other, _State, _Data) ->
 
 %% subscriptions and notifications
 
-subscribe(Tid, #gen_data{subs=Subs}=State) ->
-    ?info("~p", [Tid]),
+subscribe(GName, #gen_data{tid=Tid, subs=Subs}=State) ->
+    ?info("~p subscribe ~p", [Tid, GName]),
     case proplists:get_value(Tid, Subs) of
         undefined ->
-            case gp:whereis(Tid) of
+            case gp:whereis(GName) of
                 undefined ->
                     State;
                 Pid ->
                     Ref = erlang:monitor(process, Pid),
-                    State#gen_data{subs = [{Tid,Pid,Ref}|Subs]}
+                    State#gen_data{subs = [{GName,Pid,Ref}|Subs]}
             end;
         _ ->
             State

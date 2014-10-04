@@ -13,14 +13,14 @@
 -include_lib("session/include/log.hrl").
 
 %% API
--export([create/1, start_link/2, hail/2]).
+-export([create/1, start_link/2, hail/3]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
          handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% -export([available/2, occupied/2, in_hail/2]). % states
--export([available/3, occupied/3, in_hail/3]). % states
+-export([available/3, occupied/3, in_hail/2, in_hail/3]). % states
 
 -define(SERVER, ?MODULE).
 
@@ -33,7 +33,7 @@
 create(Opts) ->
     Tid = counter:next_tid(?MODULE), % simulate persistent creation, client process blocks
     {ok, _Pid} = entity_sup:start_grandchild(Tid, Opts),
-    Tid.
+    {ok, Tid}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -47,10 +47,9 @@ create(Opts) ->
 start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_entity:start_link(Tid, Opts).
-    %% gen_entity:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
-hail(Tid, HailTid) ->
-    gen_entity:sync_send_event(gp:whereis(Tid), HailTid).
+hail(Tid, Order, Opts) ->
+    gen_entity:sync_send_event(Tid, {hail, Order, Opts}).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -92,6 +91,11 @@ init([Tid, Opts]) ->
 %% state_name(_Event, State) ->
 %%     {next_state, state_name, State}.
 
+in_hail({timed_out,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
+    gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
+    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, available, NextState}.
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -113,11 +117,10 @@ init([Tid, Opts]) ->
 available(occupy, _From, State) ->
     NextStateName = occupied,
     {reply, {ok, NextStateName}, NextStateName, State};
-available({hail_for, {order,_}=OrderTid}, _From, #driver_state{tid=Tid}=State) ->
-    NextStateName = in_hail,
-    HailTid = hail:create(OrderTid, Tid, []),
-    gen_entity:send_all_state_event(self(), {subscribe, HailTid}), % CORRECT?
-    {reply, {ok, {NextStateName, HailTid}}, NextStateName, State#driver_state{hail=HailTid}};
+available({hail, Order, Opts}, _From, #driver_state{tid=Tid}=State) ->
+    {ok, Hail} = hail:create(Order, Tid, Opts),
+    %% gen_entity:send_all_state_event(self(), {subscribe, Hail}),
+    {reply, {ok, Hail}, in_hail, State#driver_state{hail=Hail}};
 available(Event, _From, State) ->
     ?info("illegal state change from available to ~p", [Event]),
     {reply, {error, currently_available}, available, State}.

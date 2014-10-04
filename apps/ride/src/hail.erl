@@ -16,10 +16,9 @@
 -export([create/3, start_link/2]).
 
 %% gen_fsm callbacks
--export([init/1, state_name/3, handle_event/3,
-         handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+-export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
--export([hailing/2, accepted/2]).
+-export([hailing/2, hailing/3, accepted/2]).
 
 -record(state, {tid, order, driver}).
 
@@ -31,8 +30,8 @@
 
 create(Order, Driver, Opts) ->
     Tid = counter:next_tid(?MODULE), % simulate persistent creation, client process blocks
-    {ok, _Pid} = entity_sup:start_grandchild(Tid, [{driver,Driver}|[{order,Order}|Opts]]),
-    Tid.
+    {ok, _Pid} = entity_sup:start_grandchild(Tid, [Driver|[Order|Opts]]),
+    {ok, Tid}.
 
 
 %%--------------------------------------------------------------------
@@ -71,7 +70,9 @@ init([Tid, Opts]) ->
     Driver = {driver, proplists:get_value(driver, Opts)},
     gen_entity:send_all_state_event(self(), {subscribe, Driver}),
     Order = {order, proplists:get_value(order, Opts)},
+    %% Order and Hail subscribe to each other
     gen_entity:send_all_state_event(self(), {subscribe, Order}),
+    gen_entity:send_all_state_event(Order, {subscribe, Tid}),
     _TimerRef = gen_entity:start_timer(Timeout, Timeout),
     {ok, hailing, #state{tid=Tid, order=Order, driver=Driver}}.
 
@@ -90,14 +91,15 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-hailing(accept, State) ->
-    ?info("accept"),
-    {next_state, accepted, State};
-hailing(decline, State) ->
-    ?info("decline"),
-    {next_state, declined, State};
+%% hailing(accept, State) ->
+%%     ?info("accept"),
+%%     {next_state, accepted, State};
+%% hailing(decline, State) ->
+%%     ?info("decline"),
+%%     {next_state, declined, State};
 hailing({timeout, Ref, Msg}, State) ->
     ?info("timeout ~p ~p", [Ref, Msg]),
+    gen_entity:remove_subs(self()),
     {next_state, timed_out, State};
 hailing(Message, State) ->
     ?info("illegal state transition request ~p", [Message]),
@@ -128,9 +130,19 @@ accepted(cancel, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-state_name(_Event, _From, State) ->
-    Reply = ok,
-    {reply, Reply, state_name, State}.
+hailing(accept, _From, State) ->
+    ?info("accept"),
+    {reply, {ok, accepted}, accepted, State};
+hailing(decline, _From, State) ->
+    ?info("decline"),
+    {next_state, {ok, declined}, declined, State};
+hailing(Message, _From, State) ->
+    ?info("illegal state transition request ~p", [Message]),
+    {next_state, hailing, State}.
+
+%% state_name(_Event, _From, State) ->
+%%     Reply = ok,
+%%     {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private

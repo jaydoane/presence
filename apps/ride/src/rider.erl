@@ -45,12 +45,11 @@ create(Opts) ->
 %%--------------------------------------------------------------------
 start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
-    %% gen_fsm:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
     gen_entity:start_link(Tid, Opts).
 
 order(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
-    gen_entity:sync_send_event(gp:whereis(Tid), {order, Opts}).
+    gen_entity:sync_send_event(Tid, {order, Opts}).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -182,9 +181,6 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(get_tid, _From, StateName, #rider_state{tid=Tid}=State) ->
-    Reply = Tid,
-    {reply, Reply, StateName, State};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.

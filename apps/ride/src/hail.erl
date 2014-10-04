@@ -13,14 +13,14 @@
 -include_lib("entity/include/log.hrl").
 
 %% API
--export([create/3, start_link/2]).
+-export([create/3, start_link/2, accept/1, decline/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 -export([hailing/2, hailing/3, accepted/2]).
 
--record(state, {tid, order, driver}).
+-record(state, {tid, order, driver, timer}).
 
 -define(DEFAULT_HAIL_TIMEOUT_MS, 10000). % 10 sec.
 
@@ -46,6 +46,12 @@ create(Order, Driver, Opts) ->
 start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_entity:start_link(Tid, Opts).
+
+accept(Hail) ->
+    gen_entity:sync_send_event(Hail, accept).
+
+decline(Hail) ->
+    gen_entity:sync_send_event(Hail, decline).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -73,8 +79,8 @@ init([Tid, Opts]) ->
     %% Order and Hail subscribe to each other
     gen_entity:send_all_state_event(self(), {subscribe, Order}),
     gen_entity:send_all_state_event(Order, {subscribe, Tid}),
-    _TimerRef = gen_entity:start_timer(Timeout, Timeout),
-    {ok, hailing, #state{tid=Tid, order=Order, driver=Driver}}.
+    Timer = gen_entity:start_timer(Timeout, Timeout),
+    {ok, hailing, #state{tid=Tid, order=Order, driver=Driver, timer=Timer}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -135,10 +141,13 @@ hailing(accept, _From, State) ->
     {reply, {ok, accepted}, accepted, State};
 hailing(decline, _From, State) ->
     ?info("decline"),
-    {next_state, {ok, declined}, declined, State};
+    NewState = cancel_timer(State),
+    gen_entity:remove_subs(self()),
+    {reply, {ok, declined}, declined, NewState};
 hailing(Message, _From, State) ->
     ?info("illegal state transition request ~p", [Message]),
     {next_state, hailing, State}.
+
 
 %% state_name(_Event, _From, State) ->
 %%     Reply = ok,
@@ -225,3 +234,8 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+cancel_timer(#state{tid=Tid, timer=Timer}=State) ->
+    Remaining = gen_entity:cancel_timer(Timer),
+    ?info("~p with ~p remaining", [Tid, Remaining]),
+    State#state{timer=undefined}.

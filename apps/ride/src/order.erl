@@ -92,6 +92,10 @@ init([Tid, Opts]) ->
 %% @end
 %%--------------------------------------------------------------------
 
+processing({declined, Hail}, State) ->
+    ?trace([Hail]),
+    gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
+    {next_state, processing, State};
 processing({timed_out, Hail}, State) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),

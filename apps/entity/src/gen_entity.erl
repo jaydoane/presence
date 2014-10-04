@@ -231,8 +231,8 @@ handle_event({subscribe, Name}, State, Data) ->
 handle_event(remove_subs, State, Data) ->
     {next_state, State, Data#gen_data{subs=[]}};
 
-handle_event({remove_sub, Sub}=Event, State, Data) ->
-    ?info("~p", [Event]),
+handle_event({remove_sub, Sub}=Event, State, #gen_data{tid=Tid}=Data) ->
+    ?trace([Tid, Event]),
     {next_state, State, remove_sub(Sub, Data)};
 
 handle_event({notify_subs, Notification}, State, #gen_data{subs=Subs}=Data) ->

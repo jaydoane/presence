@@ -91,6 +91,10 @@ init([Tid, Opts]) ->
 %% state_name(_Event, State) ->
 %%     {next_state, state_name, State}.
 
+in_hail({declined,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
+    gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
+    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, available, NextState};
 in_hail({timed_out,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
     NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},

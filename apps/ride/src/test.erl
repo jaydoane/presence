@@ -59,3 +59,16 @@ t_hail_timeout() ->
     ordering = gen_entity:state(Rider),
     ok.
 
+t_hail_decline() ->
+    {_Rider, Order} = create_rider_and_order(),
+    {ok, Driver} = driver:create([{name, "A Driver"}]),
+    available = gen_entity:state(Driver),
+    {ok, Hail} = driver:hail(Driver, Order, [{timeout_ms,9}]),
+    in_hail = gen_entity:state(Driver),
+    [] = gen_entity:subs(Driver),
+    hailing = gen_entity:state(Hail),
+    {ok, declined} = hail:decline(Hail),
+    available = gen_entity:state(Driver),
+    declined = gen_entity:state(Hail),
+    [] = gen_entity:subs(Hail),
+    ok.

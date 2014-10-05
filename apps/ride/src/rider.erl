@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(rider_state, {tid, name, order, old_orders}).
+-record(rider_state, {tid, name, order, old_orders=[]}).
 
 %%%===================================================================
 %%% API

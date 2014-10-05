@@ -26,6 +26,7 @@ hail_test_() ->
       ,{spawn, ?_test(?debugVal(t_hail_decline()))} 
       ,{spawn, ?_test(?debugVal(t_hail_accept()))} 
       ,{spawn, ?_test(?debugVal(t_hail_complete()))} 
+      ,{spawn, ?_test(?debugVal(t_idle_timeout()))} 
      ]}.
     
 -endif.
@@ -101,3 +102,11 @@ t_hail_complete() ->
     {ok, available} = driver:vacate(Driver),
     observing = gen_entity:state(Rider),
     ok.
+
+t_idle_timeout() ->
+    {ok, Rider} = rider:create([{name,"A Rider"}, {idle_timeout,5}]),
+    observing = gen_entity:state(Rider),
+    timer:sleep(10),
+    undefined = gp:whereis(Rider),
+    ok.
+    

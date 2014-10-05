@@ -19,6 +19,8 @@
 -include_lib("entity/include/log.hrl").
 -include_lib("entity/include/entity.hrl").
 
+-define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
+
 %% API
 -export([start_link/2, subs/1, state/1, send_subs_event/2, remove_subs/1]).
 
@@ -39,6 +41,7 @@ behaviour_info(callbacks) ->
 
 -record(gen_data, {tid, created=os:timestamp(),
                    module, entity_state, entity_data,
+                   idle_timer, idle_timeout,
                    subs=[] :: [sub()]}).
 
 %%%===================================================================
@@ -139,18 +142,19 @@ reply(Caller, Reply) ->
 %%--------------------------------------------------------------------
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
+    IdleTimout = proplists:get_value(idle_timeout, Opts, ?DEFAULT_IDLE_TIMEOUT),
     case Type:init([Tid, Opts]) of
         {ok, EntityState, EntityData} ->
             io:fwrite("    {ok, ~p, ~p}~n", [EntityState, EntityData]),
             Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
-                             entity_data=EntityData},
-            {ok, state, Data};
+                             entity_data=EntityData, idle_timeout=IdleTimout},
+            {ok, state, reset_idle_timer(Data)};
         {ok, EntityState, EntityData, Timeout} ->
             io:fwrite("    {ok, ~p, ~p, ~p}~n",
                       [EntityState, EntityData, Timeout]),
             Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
-                             entity_data=EntityData},
-            {ok, state, Data, Timeout};
+                             entity_data=EntityData, idle_timeout=IdleTimout},
+            {ok, state, reset_idle_timer(Data), Timeout};
         {stop, Reason} ->
             io:fwrite("    {stop, ~p}~n", [Reason]),
             {stop, Reason};
@@ -174,6 +178,9 @@ init([{Type,_Id}=Tid, Opts]) ->
 %%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
+state({timeout, Ref, idle}, Data) ->
+    ?trace([timeout, idle, Ref]),
+    {stop, normal, Data};
 state(Event, #gen_data{module=Module, entity_data=EntityData,
                        entity_state=EntityState}=Data) ->
     io:fwrite("~p:~p(~p, ~p) ->~n",
@@ -380,31 +387,44 @@ notify_subs_if_entity_state_changed(NewEntityState, #gen_data{tid=Tid, entity_st
     Count = length([send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs]),
     {ok, Count}.
 
+reset_idle_timer_if_state_changed(EntityState, #gen_data{entity_state=EntityState}=Data) ->
+    Data;
+reset_idle_timer_if_state_changed(_NewEntityState, #gen_data{entity_state=_EntityState}=Data) ->
+    reset_idle_timer(Data).
+
+reset_idle_timer(#gen_data{idle_timer=undefined, idle_timeout=IdleTimeout}=Data) ->
+    NewTimer = gen_entity:start_timer(IdleTimeout, idle),
+    Data#gen_data{idle_timer=NewTimer, idle_timeout=IdleTimeout};
+reset_idle_timer(#gen_data{idle_timer=Timer, idle_timeout=IdleTimeout}=Data) ->
+    _Remaining = cancel_timer(Timer),
+    NewTimer = gen_entity:start_timer(IdleTimeout, idle),
+    Data#gen_data{idle_timer=NewTimer, idle_timeout=IdleTimeout}.
+
 %% This function handles the common result set of callbacks.
 
 handle_result({next_state, NewEntityState, NewEntityData}, State, Data) ->
     io:fwrite("    {next_state, ~p, ~p}~n", [NewEntityState, NewEntityData]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
-    {next_state, State, NewData};
+    {next_state, State, reset_idle_timer_if_state_changed(NewEntityState, NewData)};
 handle_result({next_state, NewEntityState, NewEntityData, Timeout}, State, Data) ->
     io:fwrite("    {next_state, ~p, ~p, ~p}~n",
               [NewEntityState, NewEntityData, Timeout]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
-    {next_state, State, NewData, Timeout};
+    {next_state, State, reset_idle_timer_if_state_changed(NewEntityState, NewData), Timeout};
 handle_result({reply, Reply, NewEntityState, NewEntityData}, State, Data) ->
     io:fwrite("    {reply, ~p, ~p, ~p}~n",
               [Reply, NewEntityState, NewEntityData]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
-    {reply, Reply, State, NewData};
+    {reply, Reply, State, reset_idle_timer_if_state_changed(NewEntityState, NewData)};
 handle_result({reply, Reply, NewEntityState, NewEntityData, Timeout}, State, Data) ->
     io:fwrite("    {reply, ~p, ~p, ~p, ~p}~n",
               [Reply, NewEntityState, NewEntityData, Timeout]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
-    {reply, Reply, State, NewData, Timeout};
+    {reply, Reply, State, reset_idle_timer_if_state_changed(NewEntityState, NewData), Timeout};
 handle_result({stop, Reason, NewEntityData}, _State, Data) ->
     io:fwrite("    {stop, ~p, ~p}~n", [Reason, NewEntityData]),
     NewData = Data#gen_data{entity_data = NewEntityData},

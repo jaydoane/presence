@@ -23,6 +23,9 @@ hail_test_() ->
      [
       {spawn, ?_test(?debugVal(t_order_cancel()))} 
       ,{spawn, ?_test(?debugVal(t_hail_timeout()))} 
+      ,{spawn, ?_test(?debugVal(t_hail_decline()))} 
+      ,{spawn, ?_test(?debugVal(t_hail_accept()))} 
+      ,{spawn, ?_test(?debugVal(t_hail_complete()))} 
      ]}.
     
 -endif.
@@ -71,4 +74,30 @@ t_hail_decline() ->
     available = gen_entity:state(Driver),
     declined = gen_entity:state(Hail),
     [] = gen_entity:subs(Hail),
+    ok.
+
+create_accepted_hail() ->
+    {Rider, Order} = create_rider_and_order(),
+    {ok, Driver} = driver:create([{name, "A Driver"}]),
+    available = gen_entity:state(Driver),
+    {ok, Hail} = driver:hail(Driver, Order, [{timeout_ms,9}]),
+    in_hail = gen_entity:state(Driver),
+    [] = gen_entity:subs(Driver),
+    hailing = gen_entity:state(Hail),
+    {ok, accepted} = hail:accept(Hail),
+    in_hail = gen_entity:state(Driver),
+    accepted = gen_entity:state(Hail),
+    {Rider, Order, Driver, Hail}.
+
+t_hail_accept() ->
+    {_Rider, _Order, _Driver, _Hail} = create_accepted_hail(),
+    ok.
+
+t_hail_complete() ->
+    {Rider, Order, Driver, Hail} = create_accepted_hail(),
+    {ok, completed} = hail:complete(Hail),
+    completed = gen_entity:state(Order),
+    occupied = gen_entity:state(Driver),
+    {ok, available} = driver:vacate(Driver),
+    observing = gen_entity:state(Rider),
     ok.

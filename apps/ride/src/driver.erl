@@ -13,7 +13,7 @@
 -include_lib("session/include/log.hrl").
 
 %% API
--export([create/1, start_link/2, hail/3]).
+-export([create/1, start_link/2, hail/3, occupy/1, vacate/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3,
@@ -50,6 +50,12 @@ start_link(Tid, Opts) ->
 
 hail(Tid, Order, Opts) ->
     gen_entity:sync_send_event(Tid, {hail, Order, Opts}).
+
+occupy(Tid) ->
+    gen_entity:sync_send_event(Tid, occupy).
+
+vacate(Tid) ->
+    gen_entity:sync_send_event(Tid, vacate).
 
 %%%===================================================================
 %%% gen_fsm callbacks
@@ -91,6 +97,11 @@ init([Tid, Opts]) ->
 %% state_name(_Event, State) ->
 %%     {next_state, state_name, State}.
 
+in_hail({completed,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
+    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, occupied, NextState};
+in_hail({accepted,Hail}, #driver_state{hail=Hail}=State) ->
+    {next_state, in_hail, State};
 in_hail({declined,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
     NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},

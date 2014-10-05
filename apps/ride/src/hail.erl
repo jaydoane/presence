@@ -13,12 +13,12 @@
 -include_lib("entity/include/log.hrl").
 
 %% API
--export([create/3, start_link/2, accept/1, decline/1]).
+-export([create/3, start_link/2, accept/1, decline/1, complete/1]).
 
 %% gen_fsm callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
--export([hailing/2, hailing/3, accepted/2]).
+-export([hailing/2, hailing/3, accepted/3]).
 
 -record(state, {tid, order, driver, timer}).
 
@@ -53,6 +53,8 @@ accept(Hail) ->
 decline(Hail) ->
     gen_entity:sync_send_event(Hail, decline).
 
+complete(Hail) ->
+    gen_entity:sync_send_event(Hail, complete).
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
@@ -78,7 +80,7 @@ init([Tid, Opts]) ->
     Order = {order, proplists:get_value(order, Opts)},
     %% Order and Hail subscribe to each other
     gen_entity:send_all_state_event(self(), {subscribe, Order}),
-    gen_entity:send_all_state_event(Order, {subscribe, Tid}),
+    %% gen_entity:send_all_state_event(Order, {subscribe, Tid}),
     Timer = gen_entity:start_timer(Timeout, Timeout),
     {ok, hailing, #state{tid=Tid, order=Order, driver=Driver, timer=Timer}}.
 
@@ -111,12 +113,12 @@ hailing(Message, State) ->
     ?info("illegal state transition request ~p", [Message]),
     {next_state, hailing, State}.
 
-accepted(complete, State) ->
-    ?info("complete"),
-    {next_state, completed, State};
-accepted(cancel, State) ->
-    ?info("cancel"),
-    {next_state, canceled, State}.
+%% accepted(complete, State) ->
+%%     ?info("complete"),
+%%     {next_state, completed, State};
+%% accepted(cancel, State) ->
+%%     ?info("cancel"),
+%%     {next_state, canceled, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -138,7 +140,8 @@ accepted(cancel, State) ->
 %%--------------------------------------------------------------------
 hailing(accept, _From, State) ->
     ?info("accept"),
-    {reply, {ok, accepted}, accepted, State};
+    NewState = cancel_timer(State),
+    {reply, {ok, accepted}, accepted, NewState};
 hailing(decline, _From, State) ->
     ?info("decline"),
     NewState = cancel_timer(State),
@@ -147,6 +150,13 @@ hailing(decline, _From, State) ->
 hailing(Message, _From, State) ->
     ?info("illegal state transition request ~p", [Message]),
     {next_state, hailing, State}.
+
+accepted(complete, _From, State) ->
+    ?info("complete"),
+    {reply, {ok, completed}, completed, State};
+accepted(cancel, _From, State) ->
+    ?info("cancel"),
+    {reply, {ok, canceled}, canceled, State}.
 
 
 %% state_name(_Event, _From, State) ->

@@ -91,9 +91,9 @@ init([Tid, Opts]) ->
 ordering({canceled, Order}, #rider_state{order=Order, old_orders=OldOrders}=State) ->
     ?info("~p", [Order]),
     {next_state, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]}};
-ordering({complete, _OrderTid}, State) ->
-    %% FIXME
-    {next_state, observing, State}.
+ordering({completed, Order}, #rider_state{order=Order, old_orders=OldOrders}=State) ->
+    ?info("~p", [Order]),
+    {next_state, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]}}.
 
 %% observing(order, #rider_state{tid=Tid}=State) ->
 %%     OrderTid = order:create(Tid, []),

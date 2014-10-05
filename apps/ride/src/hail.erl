@@ -81,7 +81,7 @@ init([Tid, Opts]) ->
     %% Order and Hail subscribe to each other
     gen_entity:send_all_state_event(self(), {subscribe, Order}),
     %% gen_entity:send_all_state_event(Order, {subscribe, Tid}),
-    Timer = gen_entity:start_timer(Timeout, Timeout),
+    Timer = gen_entity:start_timer(Timeout, {server, Timeout}),
     {ok, hailing, #state{tid=Tid, order=Order, driver=Driver, timer=Timer}}.
 
 %%--------------------------------------------------------------------

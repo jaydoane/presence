@@ -15,11 +15,10 @@
 %% API
 -export([create/1, start_link/2, hail/3, occupy/1, vacate/1]).
 
-%% gen_fsm callbacks
--export([init/1, handle_event/3,
-         handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
+%% callbacks
+-export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
-%% -export([available/2, occupied/2, in_hail/2]). % states
+%% states
 -export([available/3, occupied/3, in_hail/2, in_hail/3]). % states
 
 -define(SERVER, ?MODULE).
@@ -94,9 +93,6 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-%% state_name(_Event, State) ->
-%%     {next_state, state_name, State}.
-
 in_hail({completed,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
     NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
     {next_state, occupied, NextState};
@@ -154,10 +150,6 @@ in_hail({cancel,HailTid}, _From, #driver_state{hail=HailTid, old_hails=OldHails}
 in_hail(Event, _From, State) ->
     ?info("illegal state change from in_hail to ~p", [Event]),
     {reply, {error, currently_in_hail}, in_hail, State}.
-
-%% state_name(_Event, _From, State) ->
-%%     Reply = ok,
-%%     {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private

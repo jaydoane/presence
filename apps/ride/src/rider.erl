@@ -95,21 +95,6 @@ ordering({completed, Order}, #rider_state{order=Order, old_orders=OldOrders}=Sta
     ?info("~p", [Order]),
     {next_state, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]}}.
 
-%% observing(order, #rider_state{tid=Tid}=State) ->
-%%     OrderTid = order:create(Tid, []),
-%%     {next_state, ordering, State#rider_state{order=OrderTid}};
-%% observing(Event, State) ->
-%%     ?info("illegal state change ~p", [Event]),
-%%     {next_state, observing, State}.
-
-%% ordering(observe, State) ->
-%%     {next_state, observing, State};
-%% ordering(Event, State) ->
-%%     ?info("illegal state change ~p", [Event]),
-%%     {next_state, ordering, State}.
-%% state_name(_Event, State) ->
-%%     {next_state, state_name, State}.
-
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -134,20 +119,6 @@ observing({order, Opts}, _From, #rider_state{tid=Tid}=State) ->
 observing(Event, _From, State) ->
     ?info("illegal state change ~p", [Event]),
     {reply, {error, currently_observing}, observing, State}.
-
-%% ordering({cancel, Order}, _From, #rider_state{order=Order, old_orders=OldOrders}=State) ->
-%%     ?info("~p", [Order]),
-%%     {reply, {ok, observing}, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]};
-%% ordering({complete, _OrderTid}, _From, State) ->
-%%     %% FIXME
-%%     {reply, {ok, observing}, observing, State};
-%% ordering(Event, _From, State) ->
-%%     ?info("illegal state change ~p", [Event]),
-%%     {reply, {error, currently_ordering}, ordering, State}.
-
-%% state_name(_Event, _From, State) ->
-%%     Reply = ok,
-%%     {reply, Reply, state_name, State}.
 
 %%--------------------------------------------------------------------
 %% @private

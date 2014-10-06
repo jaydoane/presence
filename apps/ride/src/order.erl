@@ -15,10 +15,10 @@
 %% API
 -export([create/2, start_link/2, cancel/2]).
 
-%% gen_fsm callbacks
+%% callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
-%% order states
+%% states
 -export([processing/2, processing/3, canceled/2, completed/2]).
 
 -define(SERVER, ?MODULE).
@@ -50,7 +50,6 @@ cancel(Tid, Reason) ->
 start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_entity:start_link(Tid, Opts).
-    %% gen_fsm:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
 %%%===================================================================
 %%% gen_fsm callbacks

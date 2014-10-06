@@ -10,7 +10,7 @@
 
 -behaviour(gen_entity).
 
--include_lib("entity/include/log.hrl").
+-include_lib("util/include/log.hrl").
 
 %% API
 -export([create/2, start_link/2, cancel/2, set_hail/2]).

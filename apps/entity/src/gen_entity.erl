@@ -16,7 +16,7 @@
 
 -behaviour(gen_fsm).
 
--include_lib("entity/include/log.hrl").
+-include_lib("util/include/log.hrl").
 -include_lib("entity/include/entity.hrl").
 
 -define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
@@ -148,21 +148,20 @@ init([{Type,_Id}=Tid, Opts]) ->
     IdleTimout = proplists:get_value(idle_timeout, Opts, ?DEFAULT_IDLE_TIMEOUT),
     case Type:init([Tid, Opts]) of
         {ok, EntityState, EntityData} ->
-            io:fwrite("    {ok, ~p, ~p}~n", [EntityState, EntityData]),
+            ?debug("    {ok, ~p, ~p}~n", [EntityState, EntityData]),
             Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
                              entity_data=EntityData, idle_timeout=IdleTimout},
             {ok, state, reset_idle_timer(Data)};
         {ok, EntityState, EntityData, Timeout} ->
-            io:fwrite("    {ok, ~p, ~p, ~p}~n",
-                      [EntityState, EntityData, Timeout]),
+            ?debug("    {ok, ~p, ~p, ~p}~n", [EntityState, EntityData, Timeout]),
             Data = #gen_data{tid=Tid, module=Type, entity_state=EntityState,
                              entity_data=EntityData, idle_timeout=IdleTimout},
             {ok, state, reset_idle_timer(Data), Timeout};
         {stop, Reason} ->
-            io:fwrite("    {stop, ~p}~n", [Reason]),
+            ?debug("    {stop, ~p}~n", [Reason]),
             {stop, Reason};
         Other ->
-            io:fwrite("    ~p~n", [Other]),
+            ?debug("    ~p~n", [Other]),
             Other
     end.        
 
@@ -186,8 +185,7 @@ state({timeout, Ref, idle}, Data) ->
     {stop, normal, Data};
 state(Event, #gen_data{module=Module, entity_data=EntityData,
                        entity_state=EntityState}=Data) ->
-    io:fwrite("~p:~p(~p, ~p) ->~n",
-              [Module, EntityState, Event, EntityData]),
+    ?debug("~p:~p(~p, ~p) ->~n", [Module, EntityState, Event, EntityData]),
     Result = Module:EntityState(Event, EntityData),
     handle_result(Result, state, Data).
 
@@ -214,8 +212,7 @@ state(Event, #gen_data{module=Module, entity_data=EntityData,
 %%     {reply, Reply, state_name, State}.
 state(Event, From, #gen_data{module=Module, entity_data=EntityData,
                              entity_state=EntityState}=Data) ->
-    io:fwrite("~p:~p(~p, ~p, ~p) ->~n",
-              [Module, EntityState, Event, From, EntityData]),
+    ?debug("~p:~p(~p, ~p, ~p) ->~n", [Module, EntityState, Event, From, EntityData]),
     Result = Module:EntityState(Event, From, EntityData),
     handle_result(Result, state, Data).
 
@@ -253,8 +250,7 @@ handle_event({notify_subs, Notification}, State, #gen_data{subs=Subs}=Data) ->
 handle_event(Event, State, #gen_data{module=Module, entity_state=EntityState,
                                      entity_data=EntityData}=Data) ->
     ?info("~p ~p", [Event, State]),
-    io:fwrite("~p:handle_event(~p, ~p, ~p) ->~n",
-              [Module, Event, EntityState, EntityData]),
+    ?debug("~p:handle_event(~p, ~p, ~p) ->~n", [Module, Event, EntityState, EntityData]),
     Result = Module:handle_event(Event, EntityState, EntityData),
     handle_result(Result, State, Data).
 
@@ -289,7 +285,7 @@ handle_sync_event(data, _From, State, #gen_data{entity_data=EntityData}=Data) ->
 
 handle_sync_event(Event, From, State, #gen_data{module=Module, entity_state=EntityState,
                                                 entity_data=EntityData}=Data) ->
-    io:fwrite("~p:handle_sync_event(~p, ~p, ~p, ~p) ->~n",
+    ?debug("~p:handle_sync_event(~p, ~p, ~p, ~p) ->~n",
               [Module, Event, From, EntityState, EntityData]),
     Result = Module:handle_sync_event(Event, From, EntityState, EntityData),
     handle_result(Result, State, Data).
@@ -316,7 +312,7 @@ handle_info({'DOWN', Ref, process, Pid, Reason}, State, Data) ->
 
 handle_info(Info, State, #gen_data{module=Module, entity_state=EntityState,
                                    entity_data=EntityData}=Data) ->
-    io:fwrite("~p:handle_info(~p, ~p, ~p) ->~n",
+    ?debug("~p:handle_info(~p, ~p, ~p) ->~n",
               [Module, Info, EntityState, EntityData]),
     Result = Module:handle_info(Info, EntityState, EntityData),
     handle_result(Result, State, Data).
@@ -337,7 +333,7 @@ handle_info(Info, State, #gen_data{module=Module, entity_state=EntityState,
 
 terminate(Reason, _State, #gen_data{module=Module, entity_state=EntityState,
                                     entity_data=EntityData}) ->
-    io:fwrite("~p:terminate(~p, ~p, ~p) ->~n",
+    ?debug("~p:terminate(~p, ~p, ~p) ->~n",
               [Module, Reason, EntityState, EntityData]),
     Module:terminate(Reason, EntityState, EntityData).
 
@@ -355,12 +351,11 @@ terminate(Reason, _State, #gen_data{module=Module, entity_state=EntityState,
 
 code_change(OldVsn, State, #gen_data{module=Module, entity_state=EntityState,
                                      entity_data=EntityData}=Data, Extra) ->
-    io:fwrite("~p:code_change(~p, ~p, ~p, ~p) ->~n",
+    ?debug("~p:code_change(~p, ~p, ~p, ~p) ->~n",
               [Module, OldVsn, EntityState, EntityData, Extra]),
     case Module:code_change(OldVsn, EntityState, EntityData, Extra) of
         {ok, NewEntityState, NewEntityData} ->
-            io:fwrite("    {ok, ~p, ~p}~n",
-                      NewEntityState, NewEntityData),
+            ?debug("    {ok, ~p, ~p}~n", [NewEntityState, NewEntityData]),
             NewData = Data#gen_data{entity_state = NewEntityState,
                                     entity_data = NewEntityData},
             {ok, State, NewData};
@@ -409,38 +404,35 @@ reset_idle_timer(#gen_data{idle_timer=Timer, idle_timeout=IdleTimeout}=Data) ->
 %% This function handles the common result set of callbacks.
 
 handle_result({next_state, NewEntityState, NewEntityData}, State, Data) ->
-    io:fwrite("    {next_state, ~p, ~p}~n", [NewEntityState, NewEntityData]),
+    ?debug("    {next_state, ~p, ~p}~n", [NewEntityState, NewEntityData]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
     {next_state, State, reset_idle_timer_if_state_changed(NewEntityState, NewData)};
 handle_result({next_state, NewEntityState, NewEntityData, Timeout}, State, Data) ->
-    io:fwrite("    {next_state, ~p, ~p, ~p}~n",
-              [NewEntityState, NewEntityData, Timeout]),
+    ?debug("    {next_state, ~p, ~p, ~p}~n", [NewEntityState, NewEntityData, Timeout]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
     {next_state, State, reset_idle_timer_if_state_changed(NewEntityState, NewData), Timeout};
 handle_result({reply, Reply, NewEntityState, NewEntityData}, State, Data) ->
-    io:fwrite("    {reply, ~p, ~p, ~p}~n",
-              [Reply, NewEntityState, NewEntityData]),
+    ?debug("    {reply, ~p, ~p, ~p}~n", [Reply, NewEntityState, NewEntityData]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
     {reply, Reply, State, reset_idle_timer_if_state_changed(NewEntityState, NewData)};
 handle_result({reply, Reply, NewEntityState, NewEntityData, Timeout}, State, Data) ->
-    io:fwrite("    {reply, ~p, ~p, ~p, ~p}~n",
-              [Reply, NewEntityState, NewEntityData, Timeout]),
+    ?debug("    {reply, ~p, ~p, ~p, ~p}~n", [Reply, NewEntityState, NewEntityData, Timeout]),
     NewData = Data#gen_data{entity_state = NewEntityState, entity_data = NewEntityData},
     notify_subs_if_entity_state_changed(NewEntityState, Data),
     {reply, Reply, State, reset_idle_timer_if_state_changed(NewEntityState, NewData), Timeout};
 handle_result({stop, Reason, NewEntityData}, _State, Data) ->
-    io:fwrite("    {stop, ~p, ~p}~n", [Reason, NewEntityData]),
+    ?debug("    {stop, ~p, ~p}~n", [Reason, NewEntityData]),
     NewData = Data#gen_data{entity_data = NewEntityData},
     {stop, Reason, NewData};
 handle_result({stop, Reason, Reply, NewEntityData}, _State, Data) ->
-    io:fwrite("    {stop, ~p, ~p, ~p}~n", [Reason, Reply, NewEntityData]),
+    ?debug("    {stop, ~p, ~p, ~p}~n", [Reason, Reply, NewEntityData]),
     NewData = Data#gen_data{entity_data = NewEntityData},
     {stop, Reason, Reply, NewData};
 handle_result(Other, _State, _Data) ->
-    io:fwrite("    ~p~n", [Other]),
+    ?debug("    ~p~n", [Other]),
     Other.
 
 %% subscriptions and notifications

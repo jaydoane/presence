@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(driver_state, {tid, name, hail, old_hails=[]}).
+-record(driver_data, {tid, name, hail, old_hails=[]}).
 
 %%%===================================================================
 %%% API
@@ -76,7 +76,7 @@ vacate(Tid) ->
 init([Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
     Name = proplists:get_value(name, Opts, "nameless driver"),
-    {ok, available, #driver_state{tid=Tid, name=Name}}.
+    {ok, available, #driver_data{tid=Tid, name=Name}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -93,18 +93,18 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-in_hail({completed,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
-    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+in_hail({completed,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
+    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
     {next_state, occupied, NextState};
-in_hail({accepted,Hail}, #driver_state{hail=Hail}=State) ->
+in_hail({accepted,Hail}, #driver_data{hail=Hail}=State) ->
     {next_state, in_hail, State};
-in_hail({declined,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
+in_hail({declined,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
     {next_state, available, NextState};
-in_hail({timed_out,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
+in_hail({timed_out,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    NextState = State#driver_state{hail=undefined, old_hails=[Hail|OldHails]},
+    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
     {next_state, available, NextState}.
 
 %%--------------------------------------------------------------------
@@ -128,10 +128,10 @@ in_hail({timed_out,Hail}, #driver_state{hail=Hail, old_hails=OldHails}=State) ->
 available(occupy, _From, State) ->
     NextStateName = occupied,
     {reply, {ok, NextStateName}, NextStateName, State};
-available({hail, Order, Opts}, _From, #driver_state{tid=Tid}=State) ->
+available({hail, Order, Opts}, _From, #driver_data{tid=Tid}=State) ->
     {ok, Hail} = hail:create(Order, Tid, Opts),
     %% gen_entity:send_all_state_event(self(), {subscribe, Hail}),
-    {reply, {ok, Hail}, in_hail, State#driver_state{hail=Hail}};
+    {reply, {ok, Hail}, in_hail, State#driver_data{hail=Hail}};
 available(Event, _From, State) ->
     ?info("illegal state change from available to ~p", [Event]),
     {reply, {error, currently_available}, available, State}.
@@ -143,9 +143,9 @@ occupied(Event, _From, State) ->
     ?info("illegal state change from occupied to ~p", [Event]),
     {reply, {error, currently_occupied}, occupied, State}.
 
-in_hail({cancel,HailTid}, _From, #driver_state{hail=HailTid, old_hails=OldHails}=State) ->
+in_hail({cancel,HailTid}, _From, #driver_data{hail=HailTid, old_hails=OldHails}=State) ->
     NextStateName = available,
-    NextState = State#driver_state{hail=undefined, old_hails=[HailTid|OldHails]},
+    NextState = State#driver_data{hail=undefined, old_hails=[HailTid|OldHails]},
     {reply, {ok, NextStateName}, NextStateName, NextState};
 in_hail(Event, _From, State) ->
     ?info("illegal state change from in_hail to ~p", [Event]),

@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {tid, rider, address, hail, old_hails=[]}).
+-record(order_data, {tid, rider, address, hail, old_hails=[]}).
 
 %%%===================================================================
 %%% API
@@ -76,7 +76,7 @@ init([Tid, Opts]) ->
     Rider = {rider, proplists:get_value(rider, Opts)},
     Address = proplists:get_value(address, Opts),
     gen_entity:send_all_state_event(self(), {subscribe, Rider}),
-    {ok, processing, #state{tid=Tid, rider=Rider, address=Address}}.
+    {ok, processing, #order_data{tid=Tid, rider=Rider, address=Address}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -93,20 +93,20 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-processing({completed, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
+processing({completed, Hail}, #order_data{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
-    {next_state, completed, State#state{hail=undefined, old_hails=[Hail|OldHails]}};
-processing({accepted, Hail}, #state{hail=Hail}=State) ->
+    {next_state, completed, State#order_data{hail=undefined, old_hails=[Hail|OldHails]}};
+processing({accepted, Hail}, #order_data{hail=Hail}=State) ->
     ?trace([Hail]),
     {next_state, processing, State};
-processing({declined, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
+processing({declined, Hail}, #order_data{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    {next_state, processing, State#state{hail=undefined, old_hails=[Hail|OldHails]}};
-processing({timed_out, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
+    {next_state, processing, State#order_data{hail=undefined, old_hails=[Hail|OldHails]}};
+processing({timed_out, Hail}, #order_data{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    {next_state, processing, State#state{hail=undefined, old_hails=[Hail|OldHails]}}.
+    {next_state, processing, State#order_data{hail=undefined, old_hails=[Hail|OldHails]}}.
 
 canceled(Event, State) ->
     ?info("illegal state change ~p", [Event]),
@@ -134,7 +134,7 @@ completed(Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-processing({cancel, _Reason}=Event, _From, #state{tid=Tid, rider=Rider}=State) ->
+processing({cancel, _Reason}=Event, _From, #order_data{tid=Tid, rider=Rider}=State) ->
     ?info("~p ~p", [Event, Tid]),
     gen_entity:send_all_state_event(Tid, {remove_sub, Rider}),
     {reply, {ok, canceled}, canceled, State};
@@ -175,7 +175,7 @@ handle_event(_Event, StateName, State) ->
 %% @end
 %%--------------------------------------------------------------------
 handle_sync_event({set_hail, Hail}, _From, StateName, State) ->
-    {reply, ok, StateName, State#state{hail=Hail}};
+    {reply, ok, StateName, State#order_data{hail=Hail}};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.

@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(rider_state, {tid, name, order, old_orders=[]}).
+-record(rider_data, {tid, name, order, old_orders=[]}).
 
 %%%===================================================================
 %%% API
@@ -71,7 +71,7 @@ order(Tid, Opts) ->
 init([Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
     Name = proplists:get_value(name, Opts, "generic rider"),
-    {ok, observing, #rider_state{tid=Tid, name=Name}}.
+    {ok, observing, #rider_data{tid=Tid, name=Name}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -88,12 +88,12 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-ordering({canceled, Order}, #rider_state{order=Order, old_orders=OldOrders}=State) ->
+ordering({canceled, Order}, #rider_data{order=Order, old_orders=OldOrders}=State) ->
     ?info("~p", [Order]),
-    {next_state, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]}};
-ordering({completed, Order}, #rider_state{order=Order, old_orders=OldOrders}=State) ->
+    {next_state, observing, State#rider_data{order=undefined, old_orders=[Order|OldOrders]}};
+ordering({completed, Order}, #rider_data{order=Order, old_orders=OldOrders}=State) ->
     ?info("~p", [Order]),
-    {next_state, observing, State#rider_state{order=undefined, old_orders=[Order|OldOrders]}}.
+    {next_state, observing, State#rider_data{order=undefined, old_orders=[Order|OldOrders]}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -113,9 +113,9 @@ ordering({completed, Order}, #rider_state{order=Order, old_orders=OldOrders}=Sta
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-observing({order, Opts}, _From, #rider_state{tid=Tid}=State) ->
+observing({order, Opts}, _From, #rider_data{tid=Tid}=State) ->
     {ok, OrderTid} = order:create(Tid, Opts),
-    {reply, {ok, OrderTid}, ordering, State#rider_state{order=OrderTid}};
+    {reply, {ok, OrderTid}, ordering, State#rider_data{order=OrderTid}};
 observing(Event, _From, State) ->
     ?info("illegal state change ~p", [Event]),
     {reply, {error, currently_observing}, observing, State}.

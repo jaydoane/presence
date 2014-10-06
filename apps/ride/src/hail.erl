@@ -21,7 +21,7 @@
 %% states
 -export([hailing/2, hailing/3, accepted/3]).
 
--record(state, {tid, order, driver, timer}).
+-record(hail_data, {tid, order, driver, timer}).
 
 -define(DEFAULT_HAIL_TIMEOUT_MS, 10000). % 10 sec.
 
@@ -82,7 +82,7 @@ init([Tid, Opts]) ->
     ok = order:set_hail(Order, Tid),
     gen_entity:send_all_state_event(self(), {subscribe, Order}),
     Timer = gen_entity:start_timer(Timeout, {server, Timeout}),
-    {ok, hailing, #state{tid=Tid, order=Order, driver=Driver, timer=Timer}}.
+    {ok, hailing, #hail_data{tid=Tid, order=Order, driver=Driver, timer=Timer}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -227,7 +227,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-cancel_timer(#state{tid=Tid, timer=Timer}=State) ->
+cancel_timer(#hail_data{tid=Tid, timer=Timer}=State) ->
     Remaining = gen_entity:cancel_timer(Timer),
     ?info("~p with ~p remaining", [Tid, Remaining]),
-    State#state{timer=undefined}.
+    State#hail_data{timer=undefined}.

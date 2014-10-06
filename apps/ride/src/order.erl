@@ -13,7 +13,7 @@
 -include_lib("entity/include/log.hrl").
 
 %% API
--export([create/2, start_link/2, cancel/2]).
+-export([create/2, start_link/2, cancel/2, set_hail/2]).
 
 %% callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
@@ -23,7 +23,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {tid, rider, address}).
+-record(state, {tid, rider, address, hail, old_hails=[]}).
 
 %%%===================================================================
 %%% API
@@ -37,6 +37,9 @@ create(Rider, Opts) ->
 cancel(Tid, Reason) ->
     ?trace([Tid, Reason]),
     gen_entity:sync_send_event(Tid, {cancel, Reason}).
+
+set_hail(Tid, Hail) ->
+    gen_entity:sync_send_all_state_event(Tid, {set_hail, Hail}).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,21 +93,20 @@ init([Tid, Opts]) ->
 %%                   {stop, Reason, NewState}
 %% @end
 %%--------------------------------------------------------------------
-
-processing({completed, Hail}, State) ->
+processing({completed, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
-    {next_state, completed, State};
-processing({accepted, Hail}, State) ->
+    {next_state, completed, State#state{hail=undefined, old_hails=[Hail|OldHails]}};
+processing({accepted, Hail}, #state{hail=Hail}=State) ->
     ?trace([Hail]),
     {next_state, processing, State};
-processing({declined, Hail}, State) ->
+processing({declined, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    {next_state, processing, State};
-processing({timed_out, Hail}, State) ->
+    {next_state, processing, State#state{hail=undefined, old_hails=[Hail|OldHails]}};
+processing({timed_out, Hail}, #state{hail=Hail, old_hails=OldHails}=State) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    {next_state, processing, State}.
+    {next_state, processing, State#state{hail=undefined, old_hails=[Hail|OldHails]}}.
 
 canceled(Event, State) ->
     ?info("illegal state change ~p", [Event]),
@@ -172,6 +174,8 @@ handle_event(_Event, StateName, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
+handle_sync_event({set_hail, Hail}, _From, StateName, State) ->
+    {reply, ok, StateName, State#state{hail=Hail}};
 handle_sync_event(_Event, _From, StateName, State) ->
     Reply = ok,
     {reply, Reply, StateName, State}.

@@ -22,7 +22,7 @@
 -define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
 
 %% API
--export([start_link/2, subs/1, state/1, data/1, send_subs_event/2, remove_subs/1]).
+-export([start_link/2, subscribe/2, subs/1, state/1, data/1, send_subs_event/2, remove_subs/1]).
 
 %% gen_fsm callbacks
 -export([init/1, state/2, state/3, handle_event/3,
@@ -61,8 +61,8 @@ start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_fsm:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
-%% sync_state({_,_}=Tid, Event) ->
-%%     sync_send_event(gp:whereis(Tid), Event).
+subscribe(Subscriber, Publisher) ->
+    gen_entity:send_all_state_event(Publisher, {subscribe, Subscriber}).
 
 subs({_,_}=Tid) ->
     sync_send_all_state_event(Tid, subs).
@@ -236,7 +236,7 @@ state(Event, From, #gen_data{module=Module, entity_data=EntityData,
 %%     {next_state, State, Data}.
 
 handle_event({subscribe, Name}, State, Data) ->
-    {next_state, State, subscribe(Name, Data)};
+    {next_state, State, do_subscribe(Name, Data)};
 
 handle_event(remove_subs, State, Data) ->
     {next_state, State, Data#gen_data{subs=[]}};
@@ -445,7 +445,7 @@ handle_result(Other, _State, _Data) ->
 
 %% subscriptions and notifications
 
-subscribe(GName, #gen_data{tid=Tid, subs=Subs}=State) ->
+do_subscribe(GName, #gen_data{tid=Tid, subs=Subs}=State) ->
     ?info("~p subscribe ~p", [Tid, GName]),
     case proplists:get_value(Tid, Subs) of
         undefined ->

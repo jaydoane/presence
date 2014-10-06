@@ -132,10 +132,6 @@ completed(Event, State) ->
 %%                   {stop, Reason, Reply, NewState}
 %% @end
 %%--------------------------------------------------------------------
-processing(complete, _From, #state{tid=Tid, rider=Rider}=State) ->
-    %% gen_entity:send_subs_event(Tid, {completed, Tid}), % TODO: sync?
-    gen_entity:send_all_state_event(Tid, {remove_sub, Rider}),
-    {reply, {ok, complete}, completed, State};
 processing({cancel, _Reason}=Event, _From, #state{tid=Tid, rider=Rider}=State) ->
     ?info("~p ~p", [Event, Tid]),
     gen_entity:send_all_state_event(Tid, {remove_sub, Rider}),

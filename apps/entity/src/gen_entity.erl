@@ -22,7 +22,7 @@
 -define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
 
 %% API
--export([start_link/2, subs/1, state/1, send_subs_event/2, remove_subs/1]).
+-export([start_link/2, subs/1, state/1, data/1, send_subs_event/2, remove_subs/1]).
 
 %% gen_fsm callbacks
 -export([init/1, state/2, state/3, handle_event/3,
@@ -69,6 +69,9 @@ subs({_,_}=Tid) ->
 
 state({_,_}=Tid) ->
     sync_send_all_state_event(Tid, state).
+
+data({_,_}=Tid) ->
+    sync_send_all_state_event(Tid, data).
 
 send_subs_event({_,_}=Tid, Event) ->
     ?info("~p, ~p", [Tid, Event]),
@@ -280,6 +283,9 @@ handle_sync_event(subs, _From, State, #gen_data{subs=Subs}=Data) ->
 
 handle_sync_event(state, _From, State, #gen_data{entity_state=EntityState}=Data) ->
     {reply, EntityState, State, Data};
+
+handle_sync_event(data, _From, State, #gen_data{entity_data=EntityData}=Data) ->
+    {reply, EntityData, State, Data};
 
 handle_sync_event(Event, From, State, #gen_data{module=Module, entity_state=EntityState,
                                                 entity_data=EntityData}=Data) ->

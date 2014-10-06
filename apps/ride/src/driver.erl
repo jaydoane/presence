@@ -36,7 +36,7 @@ create(Opts) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a gen_fsm process which calls Module:init/1 to
+%% Creates a gen_entity process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
 %%
@@ -57,18 +57,18 @@ vacate(Tid) ->
     gen_entity:sync_send_event(Tid, vacate).
 
 %%%===================================================================
-%%% gen_fsm callbacks
+%%% gen_entity callbacks
 %%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Whenever a gen_fsm is started using gen_fsm:start/[3,4] or
-%% gen_fsm:start_link/[3,4], this function is called by the new
+%% Whenever a gen_entity is started using gen_entity:start/[3,4] or
+%% gen_entity:start_link/[3,4], this function is called by the new
 %% process to initialize.
 %%
-%% @spec init(Args) -> {ok, StateName, State} |
-%%                     {ok, StateName, State, Timeout} |
+%% @spec init(Args) -> {ok, State, Data} |
+%%                     {ok, State, Data, Timeout} |
 %%                     ignore |
 %%                     {stop, StopReason}
 %% @end
@@ -82,139 +82,135 @@ init([Tid, Opts]) ->
 %% @private
 %% @doc
 %% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
+%% state name. Whenever a gen_entity receives an event sent using
+%% gen_entity:send_event/2, the instance of this function with the same
+%% name as the current state name State is called to handle
 %% the event. It is also called if a timeout occurs.
 %%
 %% @spec state_name(Event, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-in_hail({completed,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
-    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
-    {next_state, occupied, NextState};
-in_hail({accepted,Hail}, #driver_data{hail=Hail}=State) ->
-    {next_state, in_hail, State};
-in_hail({declined,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
+in_hail({completed,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=Data) ->
+    NextData = Data#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, occupied, NextData};
+in_hail({accepted,Hail}, #driver_data{hail=Hail}=Data) ->
+    {next_state, in_hail, Data};
+in_hail({declined,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=Data) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
-    {next_state, available, NextState};
-in_hail({timed_out,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=State) ->
+    NextData = Data#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, available, NextData};
+in_hail({timed_out,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=Data) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    NextState = State#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
-    {next_state, available, NextState}.
+    NextData = Data#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
+    {next_state, available, NextData}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_event/[2,3], the instance of this function with
-%% the same name as the current state name StateName is called to
+%% state name. Whenever a gen_entity receives an event sent using
+%% gen_entity:sync_send_event/[2,3], the instance of this function with
+%% the same name as the current state name State is called to
 %% handle the event.
 %%
 %% @spec state_name(Event, From, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {reply, Reply, NextState, NextData} |
+%%                   {reply, Reply, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData} |
+%%                   {stop, Reason, Reply, NewData}
 %% @end
 %%--------------------------------------------------------------------
-available(occupy, _From, State) ->
-    NextStateName = occupied,
-    {reply, {ok, NextStateName}, NextStateName, State};
-available({hail, Order, Opts}, _From, #driver_data{tid=Tid}=State) ->
+available(occupy, _From, Data) ->
+    {reply, {ok, occupied}, occupied, Data};
+available({hail, Order, Opts}, _From, #driver_data{tid=Tid}=Data) ->
     {ok, Hail} = hail:create(Order, Tid, Opts),
-    %% gen_entity:send_all_state_event(self(), {subscribe, Hail}),
-    {reply, {ok, Hail}, in_hail, State#driver_data{hail=Hail}};
-available(Event, _From, State) ->
+    {reply, {ok, Hail}, in_hail, Data#driver_data{hail=Hail}};
+available(Event, _From, Data) ->
     ?info("illegal state change from available to ~p", [Event]),
-    {reply, {error, currently_available}, available, State}.
+    {reply, {error, currently_available}, available, Data}.
 
-occupied(vacate, _From, State) ->
-    NextStateName = available,
-    {reply, {ok, NextStateName}, NextStateName, State};
-occupied(Event, _From, State) ->
+occupied(vacate, _From, Data) ->
+    {reply, {ok, available}, available, Data};
+occupied(Event, _From, Data) ->
     ?info("illegal state change from occupied to ~p", [Event]),
-    {reply, {error, currently_occupied}, occupied, State}.
+    {reply, {error, currently_occupied}, occupied, Data}.
 
-in_hail({cancel,HailTid}, _From, #driver_data{hail=HailTid, old_hails=OldHails}=State) ->
-    NextStateName = available,
-    NextState = State#driver_data{hail=undefined, old_hails=[HailTid|OldHails]},
-    {reply, {ok, NextStateName}, NextStateName, NextState};
-in_hail(Event, _From, State) ->
+in_hail({cancel,HailTid}, _From, #driver_data{hail=HailTid, old_hails=OldHails}=Data) ->
+    NextData = Data#driver_data{hail=undefined, old_hails=[HailTid|OldHails]},
+    {reply, {ok, available}, available, NextData};
+in_hail(Event, _From, Data) ->
     ?info("illegal state change from in_hail to ~p", [Event]),
-    {reply, {error, currently_in_hail}, in_hail, State}.
+    {reply, {error, currently_in_hail}, in_hail, Data}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_all_state_event/2, this function is called to handle
+%% Whenever a gen_entity receives an event sent using
+%% gen_entity:send_all_state_event/2, this function is called to handle
 %% the event.
 %%
-%% @spec handle_event(Event, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%% @spec handle_event(Event, State, Data) ->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-handle_event(_Event, StateName, State) ->
-    {next_state, StateName, State}.
+handle_event(_Event, State, Data) ->
+    {next_state, State, Data}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_all_state_event/[2,3], this function is called
+%% Whenever a gen_entity receives an event sent using
+%% gen_entity:sync_send_all_state_event/[2,3], this function is called
 %% to handle the event.
 %%
-%% @spec handle_sync_event(Event, From, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
+%% @spec handle_sync_event(Event, From, State, Data) ->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {reply, Reply, NextState, NextData} |
+%%                   {reply, Reply, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData} |
+%%                   {stop, Reason, Reply, NewData}
 %% @end
 %%--------------------------------------------------------------------
-handle_sync_event(_Event, _From, StateName, State) ->
+handle_sync_event(_Event, _From, State, Data) ->
     Reply = ok,
-    {reply, Reply, StateName, State}.
+    {reply, Reply, State, Data}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function is called by a gen_fsm when it receives any
+%% This function is called by a gen_entity when it receives any
 %% message other than a synchronous or asynchronous event
 %% (or a system message).
 %%
-%% @spec handle_info(Info,StateName,State)->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
+%% @spec handle_info(Info, State, Data)->
+%%                   {next_state, NextState, NextData} |
+%%                   {next_state, NextState, NextData, Timeout} |
+%%                   {stop, Reason, NewData}
 %% @end
 %%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
-    {next_state, StateName, State}.
+handle_info(_Info, State, Data) ->
+    {next_state, State, Data}.
 
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% This function is called by a gen_fsm when it is about to
+%% This function is called by a gen_entity when it is about to
 %% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_fsm terminates with
+%% necessary cleaning up. When it returns, the gen_entity terminates with
 %% Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, StateName, State) -> void()
+%% @spec terminate(Reason, State, Data) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _State, _Data) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -222,12 +218,12 @@ terminate(_Reason, _StateName, _State) ->
 %% @doc
 %% Convert process state when code is changed
 %%
-%% @spec code_change(OldVsn, StateName, State, Extra) ->
-%%                   {ok, StateName, NewState}
+%% @spec code_change(OldVsn, State, Data, Extra) ->
+%%                   {ok, State, NewData}
 %% @end
 %%--------------------------------------------------------------------
-code_change(_OldVsn, StateName, State, _Extra) ->
-    {ok, StateName, State}.
+code_change(_OldVsn, State, Data, _Extra) ->
+    {ok, State, Data}.
 
 %%%===================================================================
 %%% Internal functions

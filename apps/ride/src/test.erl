@@ -40,6 +40,31 @@ create_rider_and_order() ->
     [{Rider, _, _}] = gen_entity:subs(Order),
     {Rider, Order}.
 
+create_hail(HailOpts) ->
+    {Rider, Order} = create_rider_and_order(),
+    {ok, Driver} = driver:create([{name, "A Driver"}]),
+    available = gen_entity:state(Driver),
+    {ok, Hail} = driver:hail(Driver, Order, HailOpts),
+    in_hail = gen_entity:state(Driver),
+    [] = gen_entity:subs(Driver),
+    hailing = gen_entity:state(Hail),
+    {Rider, Order, Driver, Hail}.
+
+create_accepted_hail() ->
+    {Rider, Order, Driver, Hail} = create_hail([]),
+    {ok, accepted} = hail:accept(Hail),
+    in_hail = gen_entity:state(Driver),
+    accepted = gen_entity:state(Hail),
+    {Rider, Order, Driver, Hail}.
+
+
+t_idle_timeout() ->
+    {ok, Rider} = rider:create([{name,"A Rider"}, {idle_timeout,5}]),
+    observing = gen_entity:state(Rider),
+    timer:sleep(10),
+    undefined = gp:whereis(Rider),
+    ok.
+
 t_order_cancel() ->
     {Rider, Order} = create_rider_and_order(),
     {ok, canceled} = order:cancel(Order, normal),
@@ -48,10 +73,7 @@ t_order_cancel() ->
     ok.
 
 t_hail_timeout() ->
-    {Rider, Order} = create_rider_and_order(),
-    {ok, Driver} = driver:create([{name, "A Driver"}]),
-    available = gen_entity:state(Driver),
-    {ok, Hail} = driver:hail(Driver, Order, [{timeout_ms,9}]),
+    {Rider, _Order, Driver, Hail} = create_hail([{timeout_ms,8}]),
     in_hail = gen_entity:state(Driver),
     [] = gen_entity:subs(Driver),
     hailing = gen_entity:state(Hail),
@@ -64,31 +86,12 @@ t_hail_timeout() ->
     ok.
 
 t_hail_decline() ->
-    {_Rider, Order} = create_rider_and_order(),
-    {ok, Driver} = driver:create([{name, "A Driver"}]),
-    available = gen_entity:state(Driver),
-    {ok, Hail} = driver:hail(Driver, Order, [{timeout_ms,9}]),
-    in_hail = gen_entity:state(Driver),
-    [] = gen_entity:subs(Driver),
-    hailing = gen_entity:state(Hail),
+    {_Rider, _Order, Driver, Hail} = create_hail([]),
     {ok, declined} = hail:decline(Hail),
     available = gen_entity:state(Driver),
     declined = gen_entity:state(Hail),
     [] = gen_entity:subs(Hail),
     ok.
-
-create_accepted_hail() ->
-    {Rider, Order} = create_rider_and_order(),
-    {ok, Driver} = driver:create([{name, "A Driver"}]),
-    available = gen_entity:state(Driver),
-    {ok, Hail} = driver:hail(Driver, Order, [{timeout_ms,9}]),
-    in_hail = gen_entity:state(Driver),
-    [] = gen_entity:subs(Driver),
-    hailing = gen_entity:state(Hail),
-    {ok, accepted} = hail:accept(Hail),
-    in_hail = gen_entity:state(Driver),
-    accepted = gen_entity:state(Hail),
-    {Rider, Order, Driver, Hail}.
 
 t_hail_accept() ->
     {_Rider, _Order, _Driver, _Hail} = create_accepted_hail(),
@@ -102,11 +105,3 @@ t_hail_complete() ->
     {ok, available} = driver:vacate(Driver),
     observing = gen_entity:state(Rider),
     ok.
-
-t_idle_timeout() ->
-    {ok, Rider} = rider:create([{name,"A Rider"}, {idle_timeout,5}]),
-    observing = gen_entity:state(Rider),
-    timer:sleep(10),
-    undefined = gp:whereis(Rider),
-    ok.
-    

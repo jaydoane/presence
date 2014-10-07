@@ -65,7 +65,7 @@ eunit: compile clean-common-test-data
 test: compile eunit
 
 ct:
-	ct_run -dir apps/session/test/ -include ../include -suite session_SUITE -logdir apps/session/test/logs
+	ct_run -dir apps/entity/ct/ -include ../include -suite entity_SUITE -logdir apps/entity/ct/logs
 
 $(DEPS_PLT):
 	@echo Building local plt at $(DEPS_PLT)

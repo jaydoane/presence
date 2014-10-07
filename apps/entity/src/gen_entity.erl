@@ -22,7 +22,8 @@
 -define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
 
 %% API
--export([start_link/2, subscribe/2, subs/1, state/1, data/1, send_subs_event/2, remove_subs/1]).
+-export([start_link/2, stop/1, state/1, data/1, created/1,
+         subscribe/2, subs/1, send_subs_event/2, remove_subs/1]).
 
 %% gen_fsm callbacks
 -export([init/1, state/2, state/3, handle_event/3,
@@ -61,8 +62,11 @@ start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_fsm:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
 
+stop(Name) ->
+    send_all_state_event(Name, stop).
+
 subscribe(Subscriber, Publisher) ->
-    gen_entity:send_all_state_event(Publisher, {subscribe, Subscriber}).
+    send_all_state_event(Publisher, {subscribe, Subscriber}).
 
 subs({_,_}=Tid) ->
     sync_send_all_state_event(Tid, subs).
@@ -72,6 +76,9 @@ state({_,_}=Tid) ->
 
 data({_,_}=Tid) ->
     sync_send_all_state_event(Tid, data).
+
+created(Name) ->
+    sync_send_all_state_event(Name, created).
 
 send_subs_event({_,_}=Tid, Event) ->
     ?info("~p, ~p", [Tid, Event]),
@@ -145,6 +152,7 @@ reply(Caller, Reply) ->
 %%--------------------------------------------------------------------
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
+    yes = global:re_register_name(Tid, self(), fun keep_newest/3),
     IdleTimout = proplists:get_value(idle_timeout, Opts, ?DEFAULT_IDLE_TIMEOUT),
     case Type:init([Tid, Opts]) of
         {ok, EntityState, EntityData} ->
@@ -181,7 +189,7 @@ init([{Type,_Id}=Tid, Opts]) ->
 %% @end
 %%--------------------------------------------------------------------
 state({timeout, Ref, idle}, Data) ->
-    ?trace([timeout, idle, Ref]),
+    ?trace([timeout, idle, Ref, Data]),
     {stop, normal, Data};
 state(Event, #gen_data{module=Module, entity_data=EntityData,
                        entity_state=EntityState}=Data) ->
@@ -232,6 +240,9 @@ state(Event, From, #gen_data{module=Module, entity_data=EntityData,
 %% handle_event(_Event, State, Data) ->
 %%     {next_state, State, Data}.
 
+handle_event(stop, _State, Data) ->
+    {stop, normal, Data};
+
 handle_event({subscribe, Name}, State, Data) ->
     {next_state, State, do_subscribe(Name, Data)};
 
@@ -276,6 +287,9 @@ handle_event(Event, State, #gen_data{module=Module, entity_state=EntityState,
 
 handle_sync_event(subs, _From, State, #gen_data{subs=Subs}=Data) ->
     {reply, Subs, State, Data};
+
+handle_sync_event(created, _From, State, #gen_data{created=Created}=Data) ->
+    {reply, Created, State, Data};
 
 handle_sync_event(state, _From, State, #gen_data{entity_state=EntityState}=Data) ->
     {reply, EntityState, State, Data};
@@ -331,8 +345,9 @@ handle_info(Info, State, #gen_data{module=Module, entity_state=EntityState,
 %% terminate(_Reason, _State, _Data) ->
 %%     ok.
 
-terminate(Reason, _State, #gen_data{module=Module, entity_state=EntityState,
-                                    entity_data=EntityData}) ->
+terminate(Reason, State, #gen_data{module=Module,entity_state=EntityState,
+                                    entity_data=EntityData}=Data) ->
+    ?trace([Reason, State, Data]),
     ?debug("~p:terminate(~p, ~p, ~p) ->~n",
               [Module, Reason, EntityState, EntityData]),
     Module:terminate(Reason, EntityState, EntityData).
@@ -384,7 +399,7 @@ notify_subs_if_entity_state_changed(_EntityState, #gen_data{entity_state=_Entity
     {ok, 0};
 notify_subs_if_entity_state_changed(NewEntityState, #gen_data{tid=Tid, entity_state=_EntityState,
                                                               subs=Subs}) ->
-    ?info("~p", [NewEntityState]),
+    %% ?info("~p", [NewEntityState]),
     Count = length([send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs]),
     {ok, Count}.
 
@@ -463,3 +478,15 @@ remove(Remove, Subs, State) ->
     ?info("removing ~p", [Remove]),
     State#gen_data{subs = Subs--Remove}.
 
+keep_newest(Name, Pid1, Pid2) ->
+    ?trace([Name, Pid1, Pid2]),
+    NewestFirst = 
+        lists:sort(
+          fun({Created1,_Pid1}, {Created2,_Pid2}) ->
+                  Created1 > Created2 end,
+          [{created(Pid1), Pid1}, {created(Pid2), Pid2}]),
+    ?info("NewestFirst ~p", [NewestFirst]),
+    [{_,KeepPid}, {_,ExitPid}] = NewestFirst,
+    ?info("name conflict for ~p, discarding ~p, keeping ~p", [Name, ExitPid, KeepPid]),
+    stop(ExitPid),
+    KeepPid.

@@ -22,7 +22,8 @@
 -define(DEFAULT_IDLE_TIMEOUT, 15*60*1000).
 
 %% API
--export([start_link/2, subscribe/2, subs/1, state/1, data/1, send_subs_event/2, remove_subs/1]).
+-export([start_link/2, stop/1, state/1, data/1, created/1,
+         subscribe/2, subs/1, send_subs_event/2, remove_subs/1]).
 
 %% gen_fsm callbacks
 -export([init/1, state/2, state/3, handle_event/3,
@@ -60,6 +61,9 @@ behaviour_info(callbacks) ->
 start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_fsm:start_link({global, Tid}, ?MODULE, [Tid, Opts], []).
+
+stop(Name) ->
+    send_all_state_event(Name, stop).
 
 subscribe(Subscriber, Publisher) ->
     gen_entity:send_all_state_event(Publisher, {subscribe, Subscriber}).
@@ -232,6 +236,9 @@ state(Event, From, #gen_data{module=Module, entity_data=EntityData,
 %% handle_event(_Event, State, Data) ->
 %%     {next_state, State, Data}.
 
+handle_event(stop, _State, Data) ->
+    {stop, normal, Data};
+
 handle_event({subscribe, Name}, State, Data) ->
     {next_state, State, do_subscribe(Name, Data)};
 
@@ -331,8 +338,9 @@ handle_info(Info, State, #gen_data{module=Module, entity_state=EntityState,
 %% terminate(_Reason, _State, _Data) ->
 %%     ok.
 
-terminate(Reason, _State, #gen_data{module=Module, entity_state=EntityState,
-                                    entity_data=EntityData}) ->
+terminate(Reason, State, #gen_data{module=Module,entity_state=EntityState,
+                                    entity_data=EntityData}=Data) ->
+    ?trace([Reason, State, Data]),
     ?debug("~p:terminate(~p, ~p, ~p) ->~n",
               [Module, Reason, EntityState, EntityData]),
     Module:terminate(Reason, EntityState, EntityData).

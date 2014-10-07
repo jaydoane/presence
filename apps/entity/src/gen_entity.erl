@@ -66,7 +66,7 @@ stop(Name) ->
     send_all_state_event(Name, stop).
 
 subscribe(Subscriber, Publisher) ->
-    gen_entity:send_all_state_event(Publisher, {subscribe, Subscriber}).
+    send_all_state_event(Publisher, {subscribe, Subscriber}).
 
 subs({_,_}=Tid) ->
     sync_send_all_state_event(Tid, subs).
@@ -152,6 +152,7 @@ reply(Caller, Reply) ->
 %%--------------------------------------------------------------------
 init([{Type,_Id}=Tid, Opts]) ->
     ?info("~p ~p", [Tid, Opts]),
+    yes = global:re_register_name(Tid, self(), fun keep_newest/3),
     IdleTimout = proplists:get_value(idle_timeout, Opts, ?DEFAULT_IDLE_TIMEOUT),
     case Type:init([Tid, Opts]) of
         {ok, EntityState, EntityData} ->
@@ -188,7 +189,7 @@ init([{Type,_Id}=Tid, Opts]) ->
 %% @end
 %%--------------------------------------------------------------------
 state({timeout, Ref, idle}, Data) ->
-    ?trace([timeout, idle, Ref]),
+    ?trace([timeout, idle, Ref, Data]),
     {stop, normal, Data};
 state(Event, #gen_data{module=Module, entity_data=EntityData,
                        entity_state=EntityState}=Data) ->
@@ -398,7 +399,7 @@ notify_subs_if_entity_state_changed(_EntityState, #gen_data{entity_state=_Entity
     {ok, 0};
 notify_subs_if_entity_state_changed(NewEntityState, #gen_data{tid=Tid, entity_state=_EntityState,
                                                               subs=Subs}) ->
-    ?info("~p", [NewEntityState]),
+    %% ?info("~p", [NewEntityState]),
     Count = length([send_event(P, {NewEntityState, Tid}) || {_T,P,_R} <- Subs]),
     {ok, Count}.
 
@@ -477,3 +478,15 @@ remove(Remove, Subs, State) ->
     ?info("removing ~p", [Remove]),
     State#gen_data{subs = Subs--Remove}.
 
+keep_newest(Name, Pid1, Pid2) ->
+    ?trace([Name, Pid1, Pid2]),
+    NewestFirst = 
+        lists:sort(
+          fun({Created1,_Pid1}, {Created2,_Pid2}) ->
+                  Created1 > Created2 end,
+          [{created(Pid1), Pid1}, {created(Pid2), Pid2}]),
+    ?info("NewestFirst ~p", [NewestFirst]),
+    [{_,KeepPid}, {_,ExitPid}] = NewestFirst,
+    ?info("name conflict for ~p, discarding ~p, keeping ~p", [Name, ExitPid, KeepPid]),
+    stop(ExitPid),
+    KeepPid.

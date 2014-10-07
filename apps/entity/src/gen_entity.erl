@@ -77,6 +77,9 @@ state({_,_}=Tid) ->
 data({_,_}=Tid) ->
     sync_send_all_state_event(Tid, data).
 
+created(Name) ->
+    sync_send_all_state_event(Name, created).
+
 send_subs_event({_,_}=Tid, Event) ->
     ?info("~p, ~p", [Tid, Event]),
     send_all_state_event(Tid, {subs, Event}).
@@ -283,6 +286,9 @@ handle_event(Event, State, #gen_data{module=Module, entity_state=EntityState,
 
 handle_sync_event(subs, _From, State, #gen_data{subs=Subs}=Data) ->
     {reply, Subs, State, Data};
+
+handle_sync_event(created, _From, State, #gen_data{created=Created}=Data) ->
+    {reply, Created, State, Data};
 
 handle_sync_event(state, _From, State, #gen_data{entity_state=EntityState}=Data) ->
     {reply, EntityState, State, Data};

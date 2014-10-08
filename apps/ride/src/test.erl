@@ -99,6 +99,8 @@ t_hail_accept() ->
 
 t_hail_complete() ->
     {Rider, Order, Driver, Hail} = create_accepted_hail(),
+    {ok, at_pickup} = hail:at_pickup(Hail),
+    {ok, rider_on_board} = hail:rider_on_board(Hail),
     {ok, completed} = hail:complete(Hail),
     completed = gen_entity:state(Order),
     occupied = gen_entity:state(Driver),

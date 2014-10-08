@@ -106,7 +106,11 @@ processing({declined, Hail}, #order_data{hail=Hail, old_hails=OldHails}=Data) ->
 processing({timed_out, Hail}, #order_data{hail=Hail, old_hails=OldHails}=Data) ->
     ?trace([Hail]),
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
-    {next_state, processing, Data#order_data{hail=undefined, old_hails=[Hail|OldHails]}}.
+    {next_state, processing, Data#order_data{hail=undefined, old_hails=[Hail|OldHails]}};
+processing(Event, Data) ->
+    ?trace([Event, Data]),
+    {next_state, processing, Data}.
+
 
 canceled(Event, Data) ->
     ?info("illegal state change ~p", [Event]),

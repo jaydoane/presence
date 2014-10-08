@@ -13,13 +13,13 @@
 -include_lib("util/include/log.hrl").
 
 %% API
--export([create/3, start_link/2, accept/1, decline/1, complete/1]).
+-export([create/3, start_link/2, accept/1, decline/1, complete/1, at_pickup/1, rider_on_board/1]).
 
 %% callbacks
 -export([init/1, handle_event/3, handle_sync_event/4, handle_info/3, terminate/3, code_change/4]).
 
 %% states
--export([hailing/2, hailing/3, accepted/3]).
+-export([hailing/2, hailing/3, accepted/3, at_pickup/3, rider_on_board/3]).
 
 -record(hail_data, {tid, order, driver, timer}).
 
@@ -47,11 +47,17 @@ start_link(Tid, Opts) ->
     ?info("~p ~p", [Tid, Opts]),
     gen_entity:start_link(Tid, Opts).
 
+decline(Hail) ->
+    gen_entity:sync_send_event(Hail, decline).
+
 accept(Hail) ->
     gen_entity:sync_send_event(Hail, accept).
 
-decline(Hail) ->
-    gen_entity:sync_send_event(Hail, decline).
+at_pickup(Hail) ->
+    gen_entity:sync_send_event(Hail, at_pickup).
+
+rider_on_board(Hail) ->
+    gen_entity:sync_send_event(Hail, rider_on_board).
 
 complete(Hail) ->
     gen_entity:sync_send_event(Hail, complete).
@@ -134,15 +140,35 @@ hailing(decline, _From, Data) ->
     NewData = cancel_timer(Data),
     gen_entity:remove_subs(self()),
     {reply, {ok, declined}, declined, NewData};
+hailing(cancel, _From, Data) ->
+    ?info("cancel"),
+    NewData = cancel_timer(Data),
+    gen_entity:remove_subs(self()),
+    {reply, {ok, canceled}, canceled, NewData};
 hailing(Message, _From, Data) ->
     ?info("illegal state transition request ~p", [Message]),
     {next_state, hailing, Data}.
 
+accepted(at_pickup, _From, Data) ->
+    {reply, {ok, at_pickup}, at_pickup, Data};
 accepted(complete, _From, Data) ->
-    ?info("complete"),
+    gen_entity:remove_subs(self()),
     {reply, {ok, completed}, completed, Data};
 accepted(cancel, _From, Data) ->
-    ?info("cancel"),
+    gen_entity:remove_subs(self()),
+    {reply, {ok, canceled}, canceled, Data}.
+
+at_pickup(rider_on_board, _From, Data) ->
+    {reply, {ok, rider_on_board}, rider_on_board, Data};
+at_pickup(cancel, _From, Data) ->
+    gen_entity:remove_subs(self()),
+    {reply, {ok, canceled}, canceled, Data}.
+
+rider_on_board(complete, _From, Data) ->
+    gen_entity:remove_subs(self()),
+    {reply, {ok, completed}, completed, Data};
+rider_on_board(cancel, _From, Data) ->
+    gen_entity:remove_subs(self()),
     {reply, {ok, canceled}, canceled, Data}.
 
 %%--------------------------------------------------------------------

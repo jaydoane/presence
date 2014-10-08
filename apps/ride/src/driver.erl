@@ -87,7 +87,7 @@ init([Tid, Opts]) ->
 %% name as the current state name State is called to handle
 %% the event. It is also called if a timeout occurs.
 %%
-%% @spec state_name(Event, State) ->
+%% @spec state_name(Event, Data) ->
 %%                   {next_state, NextState, NextData} |
 %%                   {next_state, NextState, NextData, Timeout} |
 %%                   {stop, Reason, NewData}
@@ -105,7 +105,10 @@ in_hail({declined,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=Data) ->
 in_hail({timed_out,Hail}, #driver_data{hail=Hail, old_hails=OldHails}=Data) ->
     gen_entity:send_all_state_event(self(), {remove_sub, Hail}),
     NextData = Data#driver_data{hail=undefined, old_hails=[Hail|OldHails]},
-    {next_state, available, NextData}.
+    {next_state, available, NextData};
+in_hail(Event, Data) ->
+    ?trace([Event, Data]),
+    {next_state, in_hail, Data}.
 
 %%--------------------------------------------------------------------
 %% @private
